@@ -187,7 +187,7 @@ console.log(response) // Full AI-generated response
 ```
 
 <ParamField path="query" type="AskParams" required>
-  Search parameters. Accepts all [SearchParams](/searching/introduction) options.
+  Search parameters. Accepts all [SearchParams](/api/types/search-params) options.
 </ParamField>
 
 **Returns:** `Promise<string>` - The complete generated response.
@@ -457,7 +457,7 @@ async function askQuestion(query: string) {
   <Card title="Build Chat UI" icon="messages" href="/answer-engine/chat">
     Learn how to create interactive chat experiences
   </Card>
-  <Card title="Search Parameters" icon="magnifying-glass" href="/searching/introduction">
+  <Card title="Search Parameters" icon="magnifying-glass" href="/api/types/search-params">
     Explore all available search options for better context retrieval
   </Card>
 </CardGroup>
