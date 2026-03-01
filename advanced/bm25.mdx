@@ -1,0 +1,481 @@
+---
+title: BM25 Ranking Algorithm
+description: Understanding and tuning the BM25 relevance scoring algorithm in Orama
+icon: ranking-star
+---
+
+## Overview
+
+Orama uses the BM25 (Best Matching 25) algorithm for relevance scoring in full-text search. BM25 is a probabilistic ranking function that scores documents based on term frequency, document length, and corpus statistics.
+
+<Info>
+BM25 is widely considered the gold standard for full-text search relevance and is used by major search engines including Elasticsearch and Apache Lucene.
+</Info>
+
+## How BM25 Works
+
+The BM25 score for a term in a document is calculated using:
+
+```
+BM25(term) = IDF × (tf × (k + 1)) / (tf + k × (1 - b + b × (fieldLength / avgFieldLength)))
+```
+
+Where:
+- **IDF**: Inverse Document Frequency - how rare the term is across all documents
+- **tf**: Term Frequency - how often the term appears in the document
+- **fieldLength**: Length of the field in the current document
+- **avgFieldLength**: Average length of this field across all documents
+- **k, b, d**: Tuning parameters
+
+### Key Components
+
+<CardGroup cols={2}>
+  <Card title="IDF (Inverse Document Frequency)" icon="magnifying-glass">
+    Measures term rarity. Rare terms get higher scores.
+    
+    ```
+    IDF = log(1 + (docsCount - matchingCount + 0.5) / (matchingCount + 0.5))
+    ```
+  </Card>
+  
+  <Card title="Term Frequency Saturation" icon="chart-line">
+    Prevents over-scoring of documents with many term repetitions. Controlled by parameter `k`.
+  </Card>
+  
+  <Card title="Document Length Normalization" icon="ruler">
+    Longer documents are penalized to prevent bias. Controlled by parameter `b`.
+  </Card>
+  
+  <Card title="Delta (d) Parameter" icon="plus-minus">
+    Additional scoring adjustment factor. Higher values increase overall scores.
+  </Card>
+</CardGroup>
+
+## BM25 Parameters
+
+Orama's BM25 implementation uses three tunable parameters:
+
+### k (Term Frequency Saturation)
+
+**Range:** 0.0 to 3.0 (typical: 1.2 to 2.0)
+
+- Controls how quickly term frequency saturation occurs
+- **Lower values (k=1.2)**: Term frequency impact saturates quickly
+- **Higher values (k=2.0)**: Term frequency continues to impact score more linearly
+
+```typescript
+import { create, search } from '@orama/orama'
+
+const db = await create({
+  schema: { title: 'string', content: 'string' }
+})
+
+// Default k=1.2
+const results = await search(db, {
+  term: 'javascript',
+  relevance: {
+    k: 1.2  // Default term frequency saturation
+  }
+})
+```
+
+<Tip>
+**Use k=1.2** for most applications. Increase to 1.5-2.0 if you want repeated terms to have more impact on scoring.
+</Tip>
+
+### b (Document Length Normalization)
+
+**Range:** 0.0 to 1.0 (typical: 0.75)
+
+- Controls document length normalization
+- **b=0**: No length normalization (all documents treated equally)
+- **b=1**: Full length normalization (longer documents heavily penalized)
+- **b=0.75**: Balanced approach (recommended)
+
+```typescript
+const results = await search(db, {
+  term: 'machine learning',
+  relevance: {
+    b: 0.75  // Balanced length normalization
+  }
+})
+```
+
+<CardGroup cols={3}>
+  <Card title="b=0" icon="equals">
+    No normalization. Good for documents of similar length.
+  </Card>
+  <Card title="b=0.5" icon="scale-unbalanced">
+    Light normalization. Some length penalty.
+  </Card>
+  <Card title="b=0.75" icon="balance-scale">
+    Recommended default. Balanced penalty.
+  </Card>
+</CardGroup>
+
+### d (Delta)
+
+**Range:** 0.0 to 1.0 (typical: 0.5)
+
+- Additional scoring factor
+- Higher values increase overall scores
+- Useful for fine-tuning score ranges
+
+```typescript
+const results = await search(db, {
+  term: 'typescript tutorial',
+  relevance: {
+    d: 0.5  // Standard delta value
+  }
+})
+```
+
+## Complete Implementation
+
+Here's how BM25 is implemented in Orama:
+
+```typescript
+export function BM25(
+  tf: number,                    // Term frequency in document
+  matchingCount: number,         // Documents containing this term
+  docsCount: number,            // Total documents in corpus
+  fieldLength: number,          // Length of field in this document
+  averageFieldLength: number,   // Average length of this field
+  { k, b, d }: Required<BM25Params>
+) {
+  // Calculate IDF
+  const idf = Math.log(
+    1 + (docsCount - matchingCount + 0.5) / (matchingCount + 0.5)
+  )
+  
+  // Calculate normalized term frequency score
+  const numerator = idf * (d + tf * (k + 1))
+  const denominator = tf + k * (1 - b + (b * fieldLength) / averageFieldLength)
+  
+  return numerator / denominator
+}
+```
+
+## Tuning for Different Use Cases
+
+### Short Documents (Titles, Names)
+
+```typescript
+const db = await create({
+  schema: {
+    title: 'string',
+    sku: 'string'
+  }
+})
+
+// Disable length normalization for short, uniform fields
+const results = await search(db, {
+  term: 'laptop',
+  relevance: {
+    k: 1.2,
+    b: 0,      // No length normalization
+    d: 0.5
+  }
+})
+```
+
+### Long Documents (Articles, Documentation)
+
+```typescript
+const db = await create({
+  schema: {
+    title: 'string',
+    content: 'string'
+  }
+})
+
+// Strong length normalization for varied document lengths
+const results = await search(db, {
+  term: 'react hooks tutorial',
+  relevance: {
+    k: 1.2,
+    b: 0.85,   // Higher length penalty
+    d: 0.5
+  }
+})
+```
+
+### E-commerce Product Search
+
+```typescript
+const catalog = await create({
+  schema: {
+    name: 'string',
+    description: 'string',
+    brand: 'string'
+  }
+})
+
+// Moderate settings with emphasis on exact matches
+const results = await search(catalog, {
+  term: 'wireless headphones',
+  relevance: {
+    k: 1.5,    // Allow term repetition to matter more
+    b: 0.5,    // Light length normalization
+    d: 0.7     // Boost overall scores
+  },
+  properties: ['name', 'description'],
+  boost: {
+    name: 2.0  // Boost title matches
+  }
+})
+```
+
+### Code Search
+
+```typescript
+const codebase = await create({
+  schema: {
+    filename: 'string',
+    code: 'string',
+    comments: 'string'
+  }
+})
+
+// Exact matches are important, term frequency matters
+const results = await search(codebase, {
+  term: 'async function',
+  relevance: {
+    k: 2.0,    // High k for repeated technical terms
+    b: 0.3,    // Low length penalty (files vary greatly)
+    d: 0.5
+  }
+})
+```
+
+## Combining with Other Features
+
+### BM25 + Field Boosting
+
+```typescript
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    content: 'string'
+  }
+})
+
+const results = await search(db, {
+  term: 'search algorithm',
+  relevance: {
+    k: 1.2,
+    b: 0.75,
+    d: 0.5
+  },
+  boost: {
+    title: 3.0,        // 3x boost for title matches
+    description: 1.5   // 1.5x boost for description matches
+  }
+})
+```
+
+### BM25 + Facet Filtering
+
+```typescript
+const results = await search(db, {
+  term: 'laptop',
+  where: {
+    category: 'electronics',
+    price: { lte: 1000 }
+  },
+  relevance: {
+    k: 1.2,
+    b: 0.75,
+    d: 0.5
+  }
+})
+```
+
+### BM25 + Custom Sorting
+
+```typescript
+const results = await search(db, {
+  term: 'best laptop',
+  relevance: {
+    k: 1.2,
+    b: 0.75,
+    d: 0.5
+  },
+  sortBy: {
+    property: 'rating',
+    order: 'DESC'
+  }
+})
+```
+
+## Understanding Score Distribution
+
+### Score Analysis
+
+```typescript
+import { create, insert, search } from '@orama/orama'
+
+const db = await create({
+  schema: { title: 'string', content: 'string' }
+})
+
+await insert(db, { title: 'JavaScript', content: 'JavaScript is great' })
+await insert(db, { title: 'JS Guide', content: 'JavaScript JavaScript JavaScript' })
+await insert(db, { title: 'Programming', content: 'Learn JavaScript basics' })
+
+const results = await search(db, {
+  term: 'javascript',
+  relevance: { k: 1.2, b: 0.75, d: 0.5 }
+})
+
+// Analyze score distribution
+results.hits.forEach(hit => {
+  console.log(`${hit.document.title}: ${hit.score.toFixed(4)}`)
+})
+
+// Calculate statistics
+const scores = results.hits.map(h => h.score)
+const avgScore = scores.reduce((a, b) => a + b) / scores.length
+const maxScore = Math.max(...scores)
+const minScore = Math.min(...scores)
+
+console.log(`Average: ${avgScore.toFixed(4)}`)
+console.log(`Range: ${minScore.toFixed(4)} - ${maxScore.toFixed(4)}`)
+```
+
+## Advanced Scoring with Token Prioritization
+
+Orama also includes a token scoring prioritization system that works with BM25:
+
+```typescript
+import { prioritizeTokenScores } from '@orama/orama'
+
+// This is used internally during search
+// Multiple token score arrays are combined with boost and threshold
+const combinedScores = prioritizeTokenScores(
+  tokenScoreArrays,  // Arrays of [docId, score] tuples
+  boost,             // Boost multiplier
+  threshold,         // Match threshold (0-1)
+  keywordsCount      // Number of search terms
+)
+```
+
+### Threshold Behavior
+
+- **threshold=0**: Only return documents containing ALL search terms (exact match)
+- **threshold=1**: Return documents containing ANY search term (fuzzy match)
+- **threshold=0.5**: Return documents containing at least 50% of search terms
+
+```typescript
+const results = await search(db, {
+  term: 'javascript react typescript',
+  threshold: 0.5,  // Match at least 2 of 3 terms
+  relevance: {
+    k: 1.2,
+    b: 0.75,
+    d: 0.5
+  }
+})
+```
+
+## Testing Your BM25 Configuration
+
+```typescript
+import { create, insert, search } from '@orama/orama'
+
+async function testBM25Params() {
+  const db = await create({
+    schema: { title: 'string', content: 'string' }
+  })
+  
+  // Insert test documents
+  await insert(db, { 
+    title: 'JavaScript Basics',
+    content: 'Learn JavaScript fundamentals'
+  })
+  await insert(db, { 
+    title: 'Advanced JS',
+    content: 'JavaScript JavaScript JavaScript advanced patterns'
+  })
+  await insert(db, { 
+    title: 'Web Development',
+    content: 'Full stack web development with JavaScript, HTML, CSS'
+  })
+  
+  // Test different parameter combinations
+  const configs = [
+    { k: 1.2, b: 0.75, d: 0.5, label: 'Default' },
+    { k: 2.0, b: 0.75, d: 0.5, label: 'High k' },
+    { k: 1.2, b: 0, d: 0.5, label: 'No length norm' },
+    { k: 1.2, b: 1.0, d: 0.5, label: 'Full length norm' }
+  ]
+  
+  for (const config of configs) {
+    const results = await search(db, {
+      term: 'javascript',
+      relevance: { k: config.k, b: config.b, d: config.d }
+    })
+    
+    console.log(`\n${config.label} (k=${config.k}, b=${config.b}, d=${config.d})`)
+    results.hits.forEach((hit, i) => {
+      console.log(`  ${i + 1}. ${hit.document.title} - Score: ${hit.score.toFixed(4)}`)
+    })
+  }
+}
+
+testBM25Params()
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Start with Defaults">
+    Begin with k=1.2, b=0.75, d=0.5. These work well for most use cases.
+  </Step>
+  
+  <Step title="Analyze Your Content">
+    Consider document length variance, term frequency patterns, and user expectations.
+  </Step>
+  
+  <Step title="Test with Real Queries">
+    Use actual user queries to evaluate ranking quality.
+  </Step>
+  
+  <Step title="Iterate Based on Feedback">
+    Adjust parameters based on relevance feedback and click-through rates.
+  </Step>
+  
+  <Step title="Monitor Score Distributions">
+    Track score ranges to ensure meaningful differentiation between results.
+  </Step>
+</Steps>
+
+## Parameter Quick Reference
+
+| Parameter | Range | Default | Effect | Use Case |
+|-----------|-------|---------|--------|----------|
+| k | 0.0-3.0 | 1.2 | Term frequency saturation | Increase for technical content with repeated terms |
+| b | 0.0-1.0 | 0.75 | Length normalization | Decrease for uniform-length documents |
+| d | 0.0-1.0 | 0.5 | Score scaling | Adjust to tune score ranges |
+
+<Tip>
+When in doubt, keep the default values. BM25's defaults are well-researched and perform excellently across diverse content types.
+</Tip>
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Original BM25 Paper" icon="file-lines">
+    Robertson & Zaragoza (2009) - "The Probabilistic Relevance Framework: BM25 and Beyond"
+  </Card>
+  <Card title="Elasticsearch BM25" icon="book">
+    Elasticsearch's implementation and tuning guide
+  </Card>
+  <Card title="Lucene Similarity" icon="code">
+    Apache Lucene's BM25 similarity implementation
+  </Card>
+  <Card title="Search Relevance" icon="ranking-star">
+    General principles of search relevance and ranking
+  </Card>
+</CardGroup>

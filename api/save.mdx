@@ -1,0 +1,335 @@
+---
+title: save()
+description: Serialize an Orama database to a portable format
+---
+
+Serializes the complete state of an Orama database instance into a portable raw data format. This includes all documents, indexes, sorting structures, and configuration.
+
+## Function Signature
+
+```typescript
+function save<T extends AnyOrama>(orama: T): RawData
+```
+
+## Parameters
+
+<ParamField path="orama" type="T extends AnyOrama" required>
+  The Orama database instance to serialize.
+  
+  ```typescript
+  const db = await create({
+    schema: {
+      title: 'string',
+      description: 'string'
+    }
+  })
+  ```
+</ParamField>
+
+## Return Value
+
+<ResponseField name="RawData" type="RawData">
+  A serialized representation of the entire database state that can be stored, transmitted, or loaded into another Orama instance.
+  
+  <Expandable title="properties">
+    <ResponseField name="internalDocumentIDStore" type="unknown">
+      Serialized internal document ID mappings that maintain the relationship between external document IDs and internal numeric IDs.
+    </ResponseField>
+    
+    <ResponseField name="index" type="unknown">
+      Serialized index data structure containing all searchable terms, their frequencies, and document references.
+      
+      This includes the full-text search index, vector indexes (if any), and all associated scoring parameters.
+    </ResponseField>
+    
+    <ResponseField name="docs" type="unknown">
+      Serialized document store containing all documents that have been inserted into the database.
+      
+      Documents are stored in their indexed form with all searchable and non-searchable properties.
+    </ResponseField>
+    
+    <ResponseField name="sorting" type="unknown">
+      Serialized sorting data structures that enable efficient sorted retrieval of documents.
+      
+      Includes all sortable properties and their associated data structures.
+    </ResponseField>
+    
+    <ResponseField name="pinning" type="unknown">
+      Serialized pinning rules and data used for result pinning in searches.
+    </ResponseField>
+    
+    <ResponseField name="language" type="Language">
+      The language used for tokenization and stemming in this database.
+      
+      Examples: `'english'`, `'spanish'`, `'french'`, `'italian'`, etc.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { create, insert, save } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    price: 'number'
+  }
+})
+
+await insert(db, {
+  title: 'Wireless Headphones',
+  description: 'Premium noise-cancelling headphones',
+  price: 199.99
+})
+
+await insert(db, {
+  title: 'USB Cable',
+  description: 'High-speed USB-C cable',
+  price: 12.99
+})
+
+// Save the entire database state
+const rawData = save(db)
+console.log(rawData)
+```
+
+### Saving to File
+
+```typescript
+import { create, insert, save } from '@orama/orama'
+import { writeFileSync } from 'fs'
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    content: 'string',
+    tags: 'string[]'
+  }
+})
+
+// Insert documents...
+await insert(db, { id: '1', title: 'Doc 1', content: '...', tags: ['tech'] })
+await insert(db, { id: '2', title: 'Doc 2', content: '...', tags: ['news'] })
+
+// Save to file
+const rawData = save(db)
+writeFileSync(
+  './database-backup.json',
+  JSON.stringify(rawData),
+  'utf-8'
+)
+
+console.log('Database saved to file')
+```
+
+### Saving and Loading for Persistence
+
+```typescript
+import { create, insert, save, load } from '@orama/orama'
+
+const schema = {
+  title: 'string',
+  description: 'string',
+  category: 'string',
+  rating: 'number'
+}
+
+// Create and populate original database
+const originalDB = await create({ schema })
+
+await insert(originalDB, {
+  title: 'Product A',
+  description: 'Description A',
+  category: 'electronics',
+  rating: 4.5
+})
+
+// Save the state
+const savedState = save(originalDB)
+
+// Later, restore in a new instance
+const restoredDB = await create({ schema })
+load(restoredDB, savedState)
+
+// The restored database has all the original data
+const results = await search(restoredDB, { term: 'Product' })
+console.log(results.count) // 1
+```
+
+### Periodic Snapshots
+
+```typescript
+import { create, save } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    timestamp: 'number',
+    event: 'string',
+    data: 'string'
+  }
+})
+
+// Create periodic snapshots
+setInterval(() => {
+  const snapshot = save(db)
+  const timestamp = new Date().toISOString()
+  
+  // Save to storage
+  localStorage.setItem(
+    `db-snapshot-${timestamp}`,
+    JSON.stringify(snapshot)
+  )
+  
+  console.log(`Snapshot created at ${timestamp}`)
+}, 60000) // Every minute
+```
+
+### Transferring Between Environments
+
+```typescript
+import { create, insert, save, load } from '@orama/orama'
+
+// Server-side: Create and save database
+const serverDB = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    content: 'string'
+  }
+})
+
+// Populate with data
+for (const doc of documents) {
+  await insert(serverDB, doc)
+}
+
+const serializedDB = save(serverDB)
+
+// Send to client
+const response = {
+  database: serializedDB,
+  version: '1.0.0'
+}
+
+// Client-side: Receive and load database
+const clientDB = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    content: 'string'
+  }
+})
+
+load(clientDB, response.database)
+
+// Client can now search without server requests
+const results = await search(clientDB, { term: 'query' })
+```
+
+### Saving with Vector Indexes
+
+```typescript
+import { create, insert, save } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    embedding: 'vector[384]'
+  }
+})
+
+await insert(db, {
+  title: 'Document 1',
+  description: 'This is a document',
+  embedding: new Array(384).fill(0).map(() => Math.random())
+})
+
+// Save includes vector indexes
+const rawData = save(db)
+
+// The serialized data includes all vector data and HNSW graph structure
+console.log('Saved database with vector index')
+```
+
+### Conditional Saving
+
+```typescript
+import { create, insert, save } from '@orama/orama'
+import { kInsertions, kRemovals } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string'
+  }
+})
+
+let lastSavedState = save(db)
+
+// Track changes
+const SAVE_THRESHOLD = 100
+
+async function maybeSnapshot() {
+  const insertions = db[kInsertions] || 0
+  const removals = db[kRemovals] || 0
+  const totalChanges = insertions + removals
+  
+  if (totalChanges >= SAVE_THRESHOLD) {
+    lastSavedState = save(db)
+    console.log(`Snapshot created after ${totalChanges} changes`)
+    
+    // Reset counters (implementation-specific)
+  }
+}
+
+// After insertions
+await insert(db, { id: '1', title: 'Doc 1' })
+await maybeSnapshot()
+```
+
+## Important Notes
+
+- The returned `RawData` object is a plain JavaScript object and can be serialized to JSON
+- **Schema information is not included** in the saved data - you must recreate the database with the same schema when loading
+- All plugin state is **not serialized** - plugins must be re-initialized when loading
+- The save operation is **synchronous** and creates a complete snapshot
+- Vector indexes and all associated data structures are included in the serialization
+- The language setting is preserved and will override the language specified during `load()`
+
+## Related Functions
+
+- [`load()`](/api/load) - Load saved data into an Orama instance
+- [`create()`](/api/create) - Create a new Orama instance
+
+## Performance Considerations
+
+- The `save()` operation is synchronous and may take time for large databases
+- Memory usage spikes during serialization as the entire state is duplicated
+- Consider compressing the serialized data for storage or transmission
+- For very large databases, consider partial snapshots or incremental backups
+- The serialized size is proportional to the number of documents and index complexity
+
+## Serialization Format
+
+The returned data structure is opaque and should be treated as a black box. The internal format may change between Orama versions, so:
+
+- Always use the same version of Orama for saving and loading
+- Test compatibility when upgrading Orama versions
+- Consider versioning your saved data for migration purposes
+
+```typescript
+const savedData = save(db)
+const dataWithVersion = {
+  version: '2.0.0',
+  oramaVersion: db.version,
+  data: savedData,
+  savedAt: new Date().toISOString()
+}
+```

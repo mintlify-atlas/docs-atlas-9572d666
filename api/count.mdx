@@ -1,0 +1,339 @@
+---
+title: count()
+description: Get the total number of documents in an Orama database instance
+---
+
+Returns the total number of documents currently stored in the Orama database.
+
+## Function Signature
+
+```typescript
+function count<T extends AnyOrama>(db: T): number
+```
+
+## Parameters
+
+<ParamField path="db" type="Orama" required>
+  The Orama database instance.
+</ParamField>
+
+## Returns
+
+<ResponseField name="count" type="number">
+  The total number of documents in the database.
+</ResponseField>
+
+## Behavior
+
+- Synchronous operation (always returns immediately)
+- Queries the document store for the current count
+- Returns 0 for an empty database
+- Does not count documents marked as deleted (if using soft deletes)
+
+## Examples
+
+### Basic Count
+
+```typescript
+import { create, insert, count } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    price: 'number'
+  }
+})
+
+console.log(count(db)) // 0
+
+await insert(db, {
+  id: 'product-1',
+  title: 'Laptop',
+  price: 999
+})
+
+console.log(count(db)) // 1
+
+await insert(db, {
+  id: 'product-2',
+  title: 'Mouse',
+  price: 29
+})
+
+console.log(count(db)) // 2
+```
+
+### Count After Batch Operations
+
+```typescript
+import { insertMultiple, count } from '@orama/orama'
+
+const products = Array.from({ length: 1000 }, (_, i) => ({
+  id: `product-${i}`,
+  title: `Product ${i}`,
+  price: Math.random() * 1000
+}))
+
+await insertMultiple(db, products)
+
+console.log(`Total documents: ${count(db)}`) // Total documents: 1000
+```
+
+### Monitor Database Growth
+
+```typescript
+const trackGrowth = async (operations: Array<() => Promise<void>>) => {
+  const growth = []
+  
+  for (const operation of operations) {
+    const before = count(db)
+    await operation()
+    const after = count(db)
+    
+    growth.push({
+      before,
+      after,
+      change: after - before
+    })
+  }
+  
+  return growth
+}
+
+const stats = await trackGrowth([
+  () => insert(db, { id: '1', title: 'A', price: 10 }),
+  () => insert(db, { id: '2', title: 'B', price: 20 }),
+  () => remove(db, '1')
+])
+
+console.log(stats)
+// [
+//   { before: 0, after: 1, change: 1 },
+//   { before: 1, after: 2, change: 1 },
+//   { before: 2, after: 1, change: -1 }
+// ]
+```
+
+### Database Statistics
+
+```typescript
+const getStats = () => {
+  const totalDocs = count(db)
+  
+  return {
+    totalDocuments: totalDocs,
+    isEmpty: totalDocs === 0,
+    isPopulated: totalDocs > 0
+  }
+}
+
+console.log(getStats())
+// {
+//   totalDocuments: 1000,
+//   isEmpty: false,
+//   isPopulated: true
+// }
+```
+
+### Verify Import
+
+```typescript
+const importAndVerify = async (data: any[]) => {
+  const beforeCount = count(db)
+  const ids = await insertMultiple(db, data)
+  const afterCount = count(db)
+  
+  const expectedCount = beforeCount + data.length
+  const actualCount = afterCount
+  
+  if (actualCount === expectedCount) {
+    console.log(`✓ Import successful: ${ids.length} documents added`)
+  } else {
+    console.error(`✗ Import mismatch: expected ${expectedCount}, got ${actualCount}`)
+  }
+  
+  return {
+    before: beforeCount,
+    after: afterCount,
+    imported: ids.length,
+    success: actualCount === expectedCount
+  }
+}
+```
+
+### Pagination Helper
+
+```typescript
+const getPaginationInfo = (page: number, pageSize: number) => {
+  const total = count(db)
+  const totalPages = Math.ceil(total / pageSize)
+  const hasNext = page < totalPages
+  const hasPrev = page > 1
+  
+  return {
+    total,
+    page,
+    pageSize,
+    totalPages,
+    hasNext,
+    hasPrev,
+    offset: (page - 1) * pageSize
+  }
+}
+
+const pageInfo = getPaginationInfo(2, 20)
+console.log(pageInfo)
+// {
+//   total: 1000,
+//   page: 2,
+//   pageSize: 20,
+//   totalPages: 50,
+//   hasNext: true,
+//   hasPrev: true,
+//   offset: 20
+// }
+```
+
+### Cleanup Threshold
+
+```typescript
+const checkCleanupNeeded = (maxDocuments: number) => {
+  const currentCount = count(db)
+  const needsCleanup = currentCount > maxDocuments
+  const excess = Math.max(0, currentCount - maxDocuments)
+  
+  return {
+    currentCount,
+    maxDocuments,
+    needsCleanup,
+    excess,
+    utilization: (currentCount / maxDocuments * 100).toFixed(1) + '%'
+  }
+}
+
+const status = checkCleanupNeeded(10000)
+if (status.needsCleanup) {
+  console.log(`Database at ${status.utilization} capacity`)
+  console.log(`Consider removing ${status.excess} documents`)
+}
+```
+
+### Cache Size Management
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    key: 'string',
+    value: 'string',
+    createdAt: 'string'
+  }
+})
+
+const MAX_CACHE_SIZE = 1000
+
+const addToCache = async (key: string, value: any) => {
+  // Check if cache is full
+  if (count(db) >= MAX_CACHE_SIZE) {
+    // Remove oldest entries
+    const results = await search(db, {
+      term: '',
+      sortBy: { property: 'createdAt', order: 'ASC' },
+      limit: 100
+    })
+    
+    const idsToRemove = results.hits.map(hit => hit.id)
+    await removeMultiple(db, idsToRemove)
+  }
+  
+  await insert(db, {
+    id: key,
+    key,
+    value: JSON.stringify(value),
+    createdAt: new Date().toISOString()
+  })
+  
+  console.log(`Cache size: ${count(db)}/${MAX_CACHE_SIZE}`)
+}
+```
+
+### Progress Indicator
+
+```typescript
+const processWithProgress = async (items: any[]) => {
+  const startCount = count(db)
+  
+  for (let i = 0; i < items.length; i++) {
+    await insert(db, items[i])
+    
+    if ((i + 1) % 100 === 0) {
+      const currentCount = count(db)
+      const added = currentCount - startCount
+      const progress = (added / items.length * 100).toFixed(1)
+      console.log(`Progress: ${progress}% (${added}/${items.length})`)
+    }
+  }
+  
+  const finalCount = count(db)
+  return finalCount - startCount
+}
+```
+
+### Database Health Check
+
+```typescript
+const healthCheck = async () => {
+  const totalDocs = count(db)
+  
+  // Verify count matches search results
+  const searchResults = await search(db, { term: '' })
+  const searchCount = searchResults.count
+  
+  const isHealthy = totalDocs === searchCount
+  
+  return {
+    healthy: isHealthy,
+    documentCount: totalDocs,
+    searchCount: searchCount,
+    discrepancy: Math.abs(totalDocs - searchCount)
+  }
+}
+
+const health = await healthCheck()
+if (!health.healthy) {
+  console.error('Database inconsistency detected!')
+}
+```
+
+## Use Cases
+
+- **Pagination**: Calculate total pages and navigation
+- **Statistics**: Monitor database size and growth
+- **Validation**: Verify import/export operations
+- **Limits**: Enforce maximum document limits
+- **Health Checks**: Verify database integrity
+- **Progress Tracking**: Show import/export progress
+- **Cache Management**: Implement size-based eviction
+- **Monitoring**: Track database metrics
+
+## Performance
+
+- O(1) operation - constant time complexity
+- No index scanning required
+- Synchronous - returns immediately
+- Very lightweight operation
+
+## Important Notes
+
+- The count represents the current state of the database
+- Does not count documents in any particular state (unless using soft deletes)
+- Always synchronous, never returns a Promise
+- Count is updated automatically with insert/remove operations
+
+## See Also
+
+- [search()](/api/search) - Search with result count
+- [insert()](/api/insert) - Add documents
+- [remove()](/api/remove) - Remove documents
+- [getByID()](/api/get-by-id) - Retrieve specific documents

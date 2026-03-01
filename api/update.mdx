@@ -1,0 +1,222 @@
+---
+title: update()
+description: Update an existing document in an Orama database instance
+---
+
+Updates an existing document in the Orama database by removing the old version and inserting the new one. This ensures all indexes are properly updated.
+
+## Function Signature
+
+```typescript
+function update<T extends AnyOrama>(
+  orama: T,
+  id: string,
+  doc: PartialSchemaDeep<TypedDocument<T>>,
+  language?: string,
+  skipHooks?: boolean
+): Promise<string> | string
+```
+
+## Parameters
+
+<ParamField path="orama" type="Orama" required>
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="id" type="string" required>
+  The ID of the document to update.
+</ParamField>
+
+<ParamField path="doc" type="PartialSchemaDeep<TypedDocument<T>>" required>
+  The new document data. Must match the database schema structure.
+</ParamField>
+
+<ParamField path="language" type="string">
+  Optional language for tokenization when re-indexing the document.
+</ParamField>
+
+<ParamField path="skipHooks" type="boolean" default="false">
+  If true, skips executing beforeUpdate, afterUpdate, beforeRemove, afterRemove, beforeInsert, and afterInsert hooks.
+</ParamField>
+
+## Returns
+
+<ResponseField name="id" type="string | Promise<string>">
+  The ID of the updated document (which may be different from the input ID if the document's ID field changed). Returns a Promise if async operations are required.
+</ResponseField>
+
+## Behavior
+
+- Triggers `beforeUpdate` hook (if not skipped)
+- Removes the existing document using `remove()`
+- Inserts the new document using `insert()`
+- Triggers `afterUpdate` hook with the new document ID (if not skipped)
+- Validates the new document against the schema
+- Automatically determines whether to run synchronously or asynchronously
+
+## Implementation Details
+
+Under the hood, `update()` performs a remove-then-insert operation:
+
+```typescript
+// Simplified implementation
+async function update(orama, id, doc, language, skipHooks) {
+  if (!skipHooks && orama.beforeUpdate) {
+    await runSingleHook(orama.beforeUpdate, orama, id)
+  }
+  
+  await remove(orama, id, language, skipHooks)
+  const newId = await insert(orama, doc, language, skipHooks)
+  
+  if (!skipHooks && orama.afterUpdate) {
+    await runSingleHook(orama.afterUpdate, orama, newId)
+  }
+  
+  return newId
+}
+```
+
+## Examples
+
+### Basic Update
+
+```typescript
+import { create, insert, update } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    price: 'number',
+    inStock: 'boolean'
+  }
+})
+
+// Insert initial document
+await insert(db, {
+  id: 'product-1',
+  title: 'Wireless Headphones',
+  price: 199.99,
+  inStock: true
+})
+
+// Update the document
+const newId = await update(db, 'product-1', {
+  id: 'product-1',
+  title: 'Wireless Headphones - Premium Edition',
+  price: 249.99,
+  inStock: true
+})
+
+console.log(newId) // 'product-1'
+```
+
+### Update with Price Change
+
+```typescript
+// Original product
+await insert(db, {
+  id: 'laptop-1',
+  title: 'Gaming Laptop',
+  price: 1299,
+  inStock: true
+})
+
+// Apply discount
+await update(db, 'laptop-1', {
+  id: 'laptop-1',
+  title: 'Gaming Laptop',
+  price: 999, // Reduced price
+  inStock: true
+})
+```
+
+### Update Stock Status
+
+```typescript
+const updateStock = async (productId: string, inStock: boolean) => {
+  // First, get the current document
+  const current = await getByID(db, productId)
+  
+  if (current) {
+    await update(db, productId, {
+      ...current,
+      inStock
+    })
+  }
+}
+
+await updateStock('product-1', false)
+```
+
+### Update Nested Properties
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    metadata: {
+      author: 'string',
+      tags: 'string[]',
+      updatedAt: 'string'
+    }
+  }
+})
+
+await insert(db, {
+  id: 'article-1',
+  title: 'Getting Started with Orama',
+  metadata: {
+    author: 'John Doe',
+    tags: ['tutorial', 'search'],
+    updatedAt: '2024-01-01'
+  }
+})
+
+await update(db, 'article-1', {
+  id: 'article-1',
+  title: 'Getting Started with Orama',
+  metadata: {
+    author: 'John Doe',
+    tags: ['tutorial', 'search', 'beginner'],
+    updatedAt: '2024-01-15'
+  }
+})
+```
+
+### Conditional Update
+
+```typescript
+const updateIfExists = async (id: string, newData: any) => {
+  const existing = await getByID(db, id)
+  
+  if (!existing) {
+    console.log('Document not found')
+    return null
+  }
+  
+  return await update(db, id, newData)
+}
+
+const result = await updateIfExists('product-1', {
+  id: 'product-1',
+  title: 'Updated Title',
+  price: 299.99
+})
+```
+
+## Important Notes
+
+- If the document doesn't exist, `update()` will throw an error during the `remove()` operation
+- For upsert behavior (insert if not exists, update if exists), use [`upsert()`](/api/upsert) instead
+- The document ID can change if the new document has a different ID field value
+- All indexes are rebuilt for the updated document
+- The operation is atomic - if the insert fails, the document won't be in the database
+
+## See Also
+
+- [insert()](/api/insert) - Insert a new document
+- [upsert()](/api/upsert) - Insert or update a document
+- [updateMultiple()](/api/update-multiple) - Update multiple documents
+- [remove()](/api/remove) - Remove a document

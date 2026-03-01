@@ -1,0 +1,362 @@
+---
+title: upsertMultiple()
+description: Insert or update multiple documents in an Orama database instance
+---
+
+Inserts new documents or updates existing ones in the Orama database in batches. For each document, if one with the same ID exists, it will be updated; otherwise, a new document will be inserted.
+
+## Function Signature
+
+```typescript
+function upsertMultiple<T extends AnyOrama>(
+  orama: T,
+  docs: PartialSchemaDeep<TypedDocument<T>>[],
+  batchSize?: number,
+  language?: string,
+  skipHooks?: boolean
+): Promise<string[]> | string[]
+```
+
+## Parameters
+
+<ParamField path="orama" type="Orama" required>
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="docs" type="PartialSchemaDeep<TypedDocument<T>>[]" required>
+  Array of documents to insert or update. Each document must match the database schema structure.
+</ParamField>
+
+<ParamField path="batchSize" type="number" default="1000">
+  Number of documents to process in each batch.
+</ParamField>
+
+<ParamField path="language" type="string">
+  Optional language for tokenization. Applied to all documents.
+</ParamField>
+
+<ParamField path="skipHooks" type="boolean" default="false">
+  If true, skips executing upsert, insert, update, remove, and multiple operation hooks.
+</ParamField>
+
+## Returns
+
+<ResponseField name="ids" type="string[] | Promise<string[]>">
+  Array of IDs for the inserted or updated documents. Returns a Promise if async operations are required.
+</ResponseField>
+
+## Behavior
+
+- Triggers `beforeUpsertMultiple` hook (if not skipped)
+- Validates all documents against the schema before processing
+- Separates documents into two groups: those that exist (to update) and those that don't (to insert)
+- Calls `updateMultiple()` for existing documents
+- Calls `innerInsertMultiple()` for new documents
+- Combines results from both operations
+- Triggers `afterUpsertMultiple` hook with all result IDs (if not skipped)
+- Processes documents in batches for optimal performance
+
+## Examples
+
+### Basic Batch Upsert
+
+```typescript
+import { create, upsertMultiple, getByID } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    price: 'number',
+    category: 'string'
+  }
+})
+
+const products = [
+  { id: 'p1', title: 'Laptop', price: 999, category: 'Electronics' },
+  { id: 'p2', title: 'Mouse', price: 29, category: 'Electronics' },
+  { id: 'p3', title: 'Keyboard', price: 79, category: 'Electronics' }
+]
+
+// First call: all documents are inserted
+const ids1 = await upsertMultiple(db, products)
+console.log('Inserted:', ids1) // ['p1', 'p2', 'p3']
+
+// Update some, insert new
+const mixed = [
+  { id: 'p1', title: 'Laptop Pro', price: 1299, category: 'Electronics' }, // Update
+  { id: 'p2', title: 'Wireless Mouse', price: 34.99, category: 'Electronics' }, // Update
+  { id: 'p4', title: 'Monitor', price: 299, category: 'Electronics' } // Insert
+]
+
+const ids2 = await upsertMultiple(db, mixed)
+console.log('Upserted:', ids2) // ['p1', 'p2', 'p4']
+```
+
+### Sync Entire Catalog
+
+```typescript
+const syncCatalog = async (externalProducts: any[]) => {
+  const docs = externalProducts.map(p => ({
+    id: p.sku,
+    title: p.name,
+    price: p.price,
+    category: p.category,
+    inStock: p.inventory > 0,
+    updatedAt: new Date().toISOString()
+  }))
+  
+  return await upsertMultiple(db, docs)
+}
+
+const catalogData = [
+  { sku: 'SKU-001', name: 'Product 1', price: 99, category: 'A', inventory: 10 },
+  { sku: 'SKU-002', name: 'Product 2', price: 149, category: 'B', inventory: 0 },
+  { sku: 'SKU-003', name: 'Product 3', price: 199, category: 'A', inventory: 5 }
+]
+
+const ids = await syncCatalog(catalogData)
+console.log(`Synced ${ids.length} products`)
+```
+
+### Import with Update Detection
+
+```typescript
+const importFromCSV = async (csvData: any[]) => {
+  const docs = csvData.map(row => ({
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    price: parseFloat(row.price),
+    importedAt: new Date().toISOString()
+  }))
+  
+  const ids = await upsertMultiple(db, docs)
+  
+  // Log statistics
+  const existing = []
+  const newDocs = []
+  
+  for (const doc of docs) {
+    const wasExisting = await getByID(db, doc.id)
+    if (wasExisting) {
+      existing.push(doc.id)
+    } else {
+      newDocs.push(doc.id)
+    }
+  }
+  
+  console.log(`Updated ${existing.length}, Inserted ${newDocs.length}`)
+  return ids
+}
+```
+
+### User Session Management
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    userId: 'string',
+    sessionData: 'string',
+    lastActive: 'string',
+    activityCount: 'number'
+  }
+})
+
+const updateSessions = async (sessions: any[]) => {
+  const docs = sessions.map(async (session) => {
+    const existing = await getByID(db, session.id)
+    
+    return {
+      id: session.id,
+      userId: session.userId,
+      sessionData: JSON.stringify(session.data),
+      lastActive: new Date().toISOString(),
+      activityCount: existing ? existing.activityCount + 1 : 1
+    }
+  })
+  
+  return await upsertMultiple(db, await Promise.all(docs))
+}
+```
+
+### Incremental Data Sync
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    content: 'string',
+    version: 'number',
+    syncedAt: 'string'
+  }
+})
+
+const syncDocuments = async (remoteDocuments: any[]) => {
+  const docs = await Promise.all(
+    remoteDocuments.map(async (remote) => {
+      const local = await getByID(db, remote.id)
+      
+      // Only update if remote version is newer
+      if (!local || remote.version > local.version) {
+        return {
+          id: remote.id,
+          title: remote.title,
+          content: remote.content,
+          version: remote.version,
+          syncedAt: new Date().toISOString()
+        }
+      }
+      
+      return null
+    })
+  )
+  
+  // Filter out nulls (documents that don't need updating)
+  const docsToSync = docs.filter(doc => doc !== null)
+  
+  if (docsToSync.length > 0) {
+    return await upsertMultiple(db, docsToSync)
+  }
+  
+  return []
+}
+```
+
+### Real-time Cache Update
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    key: 'string',
+    value: 'string',
+    ttl: 'number',
+    updatedAt: 'string'
+  }
+})
+
+const updateCache = async (entries: Array<{key: string, value: any, ttl?: number}>) => {
+  const docs = entries.map(entry => ({
+    id: entry.key,
+    key: entry.key,
+    value: JSON.stringify(entry.value),
+    ttl: entry.ttl || 3600,
+    updatedAt: new Date().toISOString()
+  }))
+  
+  return await upsertMultiple(db, docs)
+}
+
+await updateCache([
+  { key: 'user:123', value: { name: 'John' }, ttl: 1800 },
+  { key: 'user:456', value: { name: 'Jane' }, ttl: 1800 },
+  { key: 'settings', value: { theme: 'dark' } }
+])
+```
+
+### Merge API Responses
+
+```typescript
+const mergeAPIData = async (apiResponses: any[]) => {
+  const allDocs = apiResponses.flatMap(response => 
+    response.items.map((item: any) => ({
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      source: response.source,
+      fetchedAt: new Date().toISOString()
+    }))
+  )
+  
+  return await upsertMultiple(db, allDocs, 500)
+}
+
+const responses = [
+  { source: 'api-1', items: [...] },
+  { source: 'api-2', items: [...] }
+]
+
+await mergeAPIData(responses)
+```
+
+### Bulk Settings Update
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    category: 'string',
+    key: 'string',
+    value: 'string'
+  }
+})
+
+const updateSettings = async (settings: Record<string, any>) => {
+  const docs = Object.entries(settings).map(([key, value]) => ({
+    id: key,
+    category: key.split('.')[0],
+    key,
+    value: JSON.stringify(value)
+  }))
+  
+  return await upsertMultiple(db, docs)
+}
+
+await updateSettings({
+  'ui.theme': 'dark',
+  'ui.language': 'en',
+  'notifications.email': true,
+  'notifications.push': false
+})
+```
+
+## Performance Optimization
+
+### Efficient Separation
+
+The function automatically separates documents into insert and update batches:
+
+```typescript
+// Internally, the function does:
+// 1. Check each document to see if it exists
+// 2. Split into docsToInsert[] and docsToUpdate[]
+// 3. Process updates with updateMultiple()
+// 4. Process inserts with innerInsertMultiple()
+// 5. Combine and return all IDs
+```
+
+### Custom Batch Size
+
+```typescript
+// For large datasets, adjust batch size
+const largeDataset = [...] // 10,000 documents
+
+// Process 2000 at a time
+const ids = await upsertMultiple(db, largeDataset, 2000)
+```
+
+## Use Cases
+
+- **Data Synchronization**: Sync local database with remote data sources
+- **Bulk Imports**: Import data without checking existence first
+- **API Integration**: Merge multiple API responses
+- **Cache Management**: Update cache entries in bulk
+- **ETL Pipelines**: Transform and load data with automatic merge
+- **Real-time Updates**: Handle streaming data with mixed inserts/updates
+
+## Important Notes
+
+- All documents are validated before any operation occurs
+- The function automatically separates inserts from updates for optimal performance
+- Document IDs are extracted using the database's `getDocumentIndexId` method
+- Both insert and update operations use batching for efficiency
+- The order of returned IDs matches the order of input documents
+
+## See Also
+
+- [upsert()](/api/upsert) - Upsert a single document
+- [insertMultiple()](/api/insert-multiple) - Insert multiple documents
+- [updateMultiple()](/api/update-multiple) - Update multiple documents

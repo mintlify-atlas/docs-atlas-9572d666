@@ -1,0 +1,629 @@
+---
+title: Building Custom Components
+description: Extend Orama with custom indexes, tokenizers, and algorithms
+icon: puzzle-piece
+---
+
+## Overview
+
+Orama's architecture is highly extensible, allowing you to create custom components for specialized use cases. You can implement custom indexes, tokenizers, document stores, sorting algorithms, and more.
+
+<Info>
+Custom components follow Orama's plugin architecture, making them easy to integrate and swap without changing core code.
+</Info>
+
+## Component Architecture
+
+Orama's core components are designed as pluggable interfaces:
+
+<CardGroup cols={2}>
+  <Card title="Index" icon="list-tree">
+    Stores and retrieves search terms and document mappings
+  </Card>
+  <Card title="Tokenizer" icon="scissors">
+    Breaks text into searchable tokens
+  </Card>
+  <Card title="Document Store" icon="database">
+    Stores and retrieves full documents
+  </Card>
+  <Card title="Sorter" icon="arrow-down-1-9">
+    Manages sorted field data for fast sorting
+  </Card>
+  <Card title="Pinning" icon="thumbtack">
+    Handles result merchandising rules
+  </Card>
+  <Card title="Algorithm" icon="brain">
+    Scoring and ranking algorithms
+  </Card>
+</CardGroup>
+
+## Custom Pinning Component
+
+Let's examine the pinning component as an example of Orama's component structure:
+
+### Component Interface
+
+```typescript
+export interface IPinning {
+  // Create a new pinning store
+  create(sharedInternalDocumentStore: InternalDocumentIDStore): PinningStore
+  
+  // Add a new rule
+  addRule(store: PinningStore, rule: PinRule): void
+  
+  // Update an existing rule
+  updateRule(store: PinningStore, rule: PinRule): void
+  
+  // Remove a rule
+  removeRule(store: PinningStore, ruleId: string): boolean
+  
+  // Retrieve rules
+  getRule(store: PinningStore, ruleId: string): PinRule | undefined
+  getAllRules(store: PinningStore): PinRule[]
+  
+  // Query rules
+  getMatchingRules(store: PinningStore, term: string | undefined): PinRule[]
+  
+  // Persistence
+  load<R = unknown>(sharedInternalDocumentStore: InternalDocumentIDStore, raw: R): PinningStore
+  save<R = unknown>(store: PinningStore): R
+}
+```
+
+### Creating a Component
+
+```typescript
+import { DocumentID, InternalDocumentIDStore } from './internal-document-id-store.js'
+
+export interface PinningStore {
+  sharedInternalDocumentStore: InternalDocumentIDStore
+  rules: Map<string, PinRule>
+}
+
+export function createPinning(): IPinning {
+  return {
+    create(sharedInternalDocumentStore: InternalDocumentIDStore): PinningStore {
+      return {
+        sharedInternalDocumentStore,
+        rules: new Map()
+      }
+    },
+    
+    addRule(store: PinningStore, rule: PinRule): void {
+      if (store.rules.has(rule.id)) {
+        throw new Error(
+          `PINNING_RULE_ALREADY_EXISTS: A pinning rule with id "${rule.id}" already exists.`
+        )
+      }
+      store.rules.set(rule.id, rule)
+    },
+    
+    updateRule(store: PinningStore, rule: PinRule): void {
+      if (!store.rules.has(rule.id)) {
+        throw new Error(
+          `PINNING_RULE_NOT_FOUND: Cannot update pinning rule with id "${rule.id}".`
+        )
+      }
+      store.rules.set(rule.id, rule)
+    },
+    
+    removeRule(store: PinningStore, ruleId: string): boolean {
+      return store.rules.delete(ruleId)
+    },
+    
+    getRule(store: PinningStore, ruleId: string): PinRule | undefined {
+      return store.rules.get(ruleId)
+    },
+    
+    getAllRules(store: PinningStore): PinRule[] {
+      return Array.from(store.rules.values())
+    },
+    
+    getMatchingRules(store: PinningStore, term: string | undefined): PinRule[] {
+      if (!term) return []
+      
+      const matchingRules: PinRule[] = []
+      for (const rule of store.rules.values()) {
+        if (matchesRule(term, rule)) {
+          matchingRules.push(rule)
+        }
+      }
+      return matchingRules
+    },
+    
+    load<R = unknown>(sharedInternalDocumentStore: InternalDocumentIDStore, raw: R): PinningStore {
+      const rawStore = raw as { rules: Array<[string, PinRule]> }
+      return {
+        sharedInternalDocumentStore,
+        rules: new Map(rawStore?.rules ?? [])
+      }
+    },
+    
+    save<R = unknown>(store: PinningStore): R {
+      return {
+        rules: Array.from(store.rules.entries())
+      } as R
+    }
+  }
+}
+```
+
+## Custom Algorithm Component
+
+### BM25 Implementation Example
+
+Here's how Orama implements the BM25 ranking algorithm:
+
+```typescript
+import { TokenScore, BM25Params } from '../types.js'
+import { InternalDocumentID } from './internal-document-id-store.js'
+
+export function BM25(
+  tf: number,                    // Term frequency
+  matchingCount: number,         // Documents containing term
+  docsCount: number,            // Total documents
+  fieldLength: number,          // Current field length
+  averageFieldLength: number,   // Average field length
+  { k, b, d }: Required<BM25Params>
+): number {
+  // Calculate IDF (Inverse Document Frequency)
+  const idf = Math.log(
+    1 + (docsCount - matchingCount + 0.5) / (matchingCount + 0.5)
+  )
+  
+  // Calculate score with length normalization
+  return (
+    idf * (d + tf * (k + 1))
+  ) / (
+    tf + k * (1 - b + (b * fieldLength) / averageFieldLength)
+  )
+}
+```
+
+### Creating a Custom Scoring Algorithm
+
+```typescript
+import { BM25Params } from '@orama/orama'
+
+// TF-IDF implementation as an alternative to BM25
+export function TFIDF(
+  tf: number,
+  matchingCount: number,
+  docsCount: number,
+  fieldLength: number,
+  averageFieldLength: number
+): number {
+  // Term Frequency (normalized by document length)
+  const normalizedTF = tf / fieldLength
+  
+  // Inverse Document Frequency
+  const idf = Math.log(docsCount / (matchingCount + 1))
+  
+  // TF-IDF score
+  return normalizedTF * idf
+}
+
+// Okapi BM25+ (improved variant)
+export function BM25Plus(
+  tf: number,
+  matchingCount: number,
+  docsCount: number,
+  fieldLength: number,
+  averageFieldLength: number,
+  { k, b, d }: Required<BM25Params>
+): number {
+  const idf = Math.log(
+    1 + (docsCount - matchingCount + 0.5) / (matchingCount + 0.5)
+  )
+  
+  // BM25+ adds a small constant to prevent zero scores
+  const delta = 1.0
+  
+  return (
+    idf * (d + tf * (k + 1) + delta)
+  ) / (
+    tf + k * (1 - b + (b * fieldLength) / averageFieldLength)
+  )
+}
+```
+
+## Custom Token Scoring
+
+The `prioritizeTokenScores` function combines scores from multiple search terms:
+
+```typescript
+import { TokenScore } from '@orama/orama'
+import { InternalDocumentID } from './internal-document-id-store.js'
+
+export function prioritizeTokenScores(
+  arrays: TokenScore[][],     // Score arrays for each term
+  boost: number,              // Score multiplier
+  threshold: number = 0,      // Match threshold (0-1)
+  keywordsCount: number       // Number of search terms
+): TokenScore[] {
+  if (boost === 0) {
+    throw new Error('INVALID_BOOST_VALUE')
+  }
+  
+  // Aggregate scores across all terms
+  const tokenScoresMap = new Map<InternalDocumentID, [number, number]>()
+  
+  for (const arr of arrays) {
+    for (const [token, score] of arr) {
+      const boostScore = score * boost
+      const oldScore = tokenScoresMap.get(token)?.[0]
+      
+      if (oldScore !== undefined) {
+        // Document matches multiple terms - boost score
+        tokenScoresMap.set(token, [
+          oldScore * 1.5 + boostScore,
+          (tokenScoresMap.get(token)?.[1] || 0) + 1
+        ])
+      } else {
+        tokenScoresMap.set(token, [boostScore, 1])
+      }
+    }
+  }
+  
+  // Convert to array and sort by score
+  const tokenScores: TokenScore[] = []
+  for (const [docId, [score]] of tokenScoresMap.entries()) {
+    tokenScores.push([docId, score])
+  }
+  
+  return tokenScores.sort((a, b) => b[1] - a[1])
+}
+```
+
+### Custom Score Aggregation
+
+```typescript
+// Custom aggregation with decay function
+export function decayingScoreAggregation(
+  arrays: TokenScore[][],
+  boost: number,
+  decayFactor: number = 0.9
+): TokenScore[] {
+  const scores = new Map<InternalDocumentID, number>()
+  
+  for (let i = 0; i < arrays.length; i++) {
+    // Apply decay based on term position
+    const decay = Math.pow(decayFactor, i)
+    
+    for (const [docId, score] of arrays[i]) {
+      const boostedScore = score * boost * decay
+      const existing = scores.get(docId) || 0
+      scores.set(docId, existing + boostedScore)
+    }
+  }
+  
+  return Array.from(scores.entries())
+    .sort((a, b) => b[1] - a[1])
+}
+
+// Custom aggregation with term proximity bonus
+export function proximityScoreAggregation(
+  arrays: TokenScore[][],
+  boost: number
+): TokenScore[] {
+  const scores = new Map<InternalDocumentID, { score: number; terms: number }>()
+  
+  for (const arr of arrays) {
+    for (const [docId, score] of arr) {
+      const existing = scores.get(docId) || { score: 0, terms: 0 }
+      scores.set(docId, {
+        score: existing.score + score * boost,
+        terms: existing.terms + 1
+      })
+    }
+  }
+  
+  // Bonus for documents matching multiple terms
+  const results: TokenScore[] = []
+  for (const [docId, { score, terms }] of scores.entries()) {
+    const proximityBonus = terms > 1 ? Math.pow(1.5, terms - 1) : 1
+    results.push([docId, score * proximityBonus])
+  }
+  
+  return results.sort((a, b) => b[1] - a[1])
+}
+```
+
+## Custom Tokenizer
+
+```typescript
+import type { Tokenizer, TokenizerConfig } from '@orama/orama'
+
+// Simple custom tokenizer
+export function createCustomTokenizer(config?: TokenizerConfig): Tokenizer {
+  return {
+    tokenize(text: string): string[] {
+      // Custom tokenization logic
+      return text
+        .toLowerCase()
+        .split(/[\s,\.!?;:]+/)
+        .filter(token => token.length > 0)
+    },
+    
+    normalize(token: string): string {
+      // Custom normalization (stemming, lemmatization, etc.)
+      return token.replace(/[^a-z0-9]/g, '')
+    },
+    
+    language: config?.language || 'english'
+  }
+}
+
+// Advanced tokenizer with stemming
+export function createStemmingTokenizer(): Tokenizer {
+  const stemCache = new Map<string, string>()
+  
+  function stem(word: string): string {
+    if (stemCache.has(word)) {
+      return stemCache.get(word)!
+    }
+    
+    // Simple suffix stripping stemmer
+    let stemmed = word
+    if (word.endsWith('ing')) {
+      stemmed = word.slice(0, -3)
+    } else if (word.endsWith('ed')) {
+      stemmed = word.slice(0, -2)
+    } else if (word.endsWith('s')) {
+      stemmed = word.slice(0, -1)
+    }
+    
+    stemCache.set(word, stemmed)
+    return stemmed
+  }
+  
+  return {
+    tokenize(text: string): string[] {
+      return text
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(t => t.length > 2)
+    },
+    
+    normalize(token: string): string {
+      return stem(token)
+    },
+    
+    language: 'english'
+  }
+}
+
+// Usage
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: { title: 'string', content: 'string' },
+  components: {
+    tokenizer: createCustomTokenizer()
+  }
+})
+```
+
+## Custom Index Implementation
+
+```typescript
+import type { Index, IndexStore } from '@orama/orama'
+
+// Simple inverted index implementation
+export function createSimpleIndex(): Index {
+  return {
+    create(schema: any): IndexStore {
+      return {
+        terms: new Map(),
+        schema
+      }
+    },
+    
+    insert(store: IndexStore, docId: string, field: string, tokens: string[]): void {
+      for (const token of tokens) {
+        const key = `${field}:${token}`
+        
+        if (!store.terms.has(key)) {
+          store.terms.set(key, new Set())
+        }
+        
+        store.terms.get(key)!.add(docId)
+      }
+    },
+    
+    remove(store: IndexStore, docId: string): void {
+      for (const docs of store.terms.values()) {
+        docs.delete(docId)
+      }
+    },
+    
+    search(store: IndexStore, field: string, token: string): Set<string> {
+      const key = `${field}:${token}`
+      return store.terms.get(key) || new Set()
+    },
+    
+    save(store: IndexStore): any {
+      const terms: Array<[string, string[]]> = []
+      for (const [key, docs] of store.terms.entries()) {
+        terms.push([key, Array.from(docs)])
+      }
+      return { terms, schema: store.schema }
+    },
+    
+    load(raw: any): IndexStore {
+      const terms = new Map()
+      for (const [key, docs] of raw.terms) {
+        terms.set(key, new Set(docs))
+      }
+      return { terms, schema: raw.schema }
+    }
+  }
+}
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Follow Interface Contracts">
+    Implement all required methods in the component interface to ensure compatibility.
+  </Step>
+  
+  <Step title="Handle Serialization">
+    Implement `save()` and `load()` methods for persistence support.
+  </Step>
+  
+  <Step title="Performance Matters">
+    Optimize hot paths (search, insert) as they're called frequently.
+  </Step>
+  
+  <Step title="Type Safety">
+    Use TypeScript interfaces and types for better IDE support and fewer bugs.
+  </Step>
+  
+  <Step title="Error Handling">
+    Provide clear error messages with error codes for debugging.
+  </Step>
+  
+  <Step title="Test Thoroughly">
+    Write comprehensive tests covering edge cases and performance.
+  </Step>
+</Steps>
+
+## Component Registration
+
+```typescript
+import { create } from '@orama/orama'
+import { createCustomTokenizer } from './custom-tokenizer'
+import { createSimpleIndex } from './custom-index'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    content: 'string'
+  },
+  components: {
+    tokenizer: createCustomTokenizer(),
+    index: createSimpleIndex()
+  }
+})
+```
+
+## Testing Custom Components
+
+```typescript
+import { describe, it, expect } from 'vitest'
+import { create, insert, search } from '@orama/orama'
+import { createCustomTokenizer } from './custom-tokenizer'
+
+describe('Custom Tokenizer', () => {
+  it('should tokenize text correctly', () => {
+    const tokenizer = createCustomTokenizer()
+    const tokens = tokenizer.tokenize('Hello, World!')
+    expect(tokens).toEqual(['hello', 'world'])
+  })
+  
+  it('should integrate with Orama', async () => {
+    const db = await create({
+      schema: { title: 'string' },
+      components: {
+        tokenizer: createCustomTokenizer()
+      }
+    })
+    
+    await insert(db, { title: 'Testing custom tokenizer' })
+    
+    const results = await search(db, { term: 'tokenizer' })
+    expect(results.hits).toHaveLength(1)
+  })
+  
+  it('should handle edge cases', () => {
+    const tokenizer = createCustomTokenizer()
+    expect(tokenizer.tokenize('')).toEqual([])
+    expect(tokenizer.tokenize('   ')).toEqual([])
+    expect(tokenizer.tokenize('a-b-c')).toEqual(['a', 'b', 'c'])
+  })
+})
+```
+
+<Tip>
+Start with small, focused components and gradually add complexity as needed. Profile your implementations to ensure they don't become performance bottlenecks.
+</Tip>
+
+## Example: Complete Custom Component
+
+```typescript
+// custom-scoring.ts
+import type { AnyOrama, SearchParams, SearchResult } from '@orama/orama'
+
+// Custom scoring component that boosts recent documents
+export interface TimeScoringConfig {
+  timeField: string
+  decayRate: number  // 0-1, how quickly scores decay
+  halfLife: number   // Days until score is halved
+}
+
+export function createTimeScoring(config: TimeScoringConfig) {
+  return {
+    score(
+      baseScore: number,
+      document: any,
+      currentTime: number = Date.now()
+    ): number {
+      const docTime = new Date(document[config.timeField]).getTime()
+      const ageInDays = (currentTime - docTime) / (1000 * 60 * 60 * 24)
+      
+      // Exponential decay
+      const decay = Math.pow(0.5, ageInDays / config.halfLife)
+      
+      return baseScore * (1 + config.decayRate * decay)
+    }
+  }
+}
+
+// Usage
+const db = await create({
+  schema: {
+    title: 'string',
+    content: 'string',
+    publishedAt: 'string'
+  }
+})
+
+const timeScoring = createTimeScoring({
+  timeField: 'publishedAt',
+  decayRate: 0.5,
+  halfLife: 30  // 30 days
+})
+
+const results = await search(db, { term: 'news' })
+
+// Apply time-based scoring
+const scoredResults = results.hits.map(hit => ({
+  ...hit,
+  score: timeScoring.score(hit.score, hit.document)
+}))
+
+// Re-sort by new scores
+scoredResults.sort((a, b) => b.score - a.score)
+```
+
+<Warning>
+Custom components must maintain compatibility with Orama's serialization format if you want to use `save()` and `load()` functionality.
+</Warning>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Component API" icon="code">
+    Full API reference for all component interfaces
+  </Card>
+  <Card title="Example Plugins" icon="puzzle-piece">
+    Community-built plugins and components
+  </Card>
+  <Card title="Performance Guide" icon="gauge-high">
+    Optimizing custom component performance
+  </Card>
+  <Card title="Contributing" icon="code-pull-request">
+    Submit your custom components to the Orama ecosystem
+  </Card>
+</CardGroup>

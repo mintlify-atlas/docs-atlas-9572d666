@@ -1,0 +1,332 @@
+---
+title: 'Importing Data'
+description: 'Best practices for importing and indexing data into Orama'
+icon: 'database'
+---
+
+Learn how to efficiently import data into your Orama database using various techniques and best practices.
+
+## Single Document Insertion
+
+For inserting individual documents, use the `insert` method:
+
+```javascript
+import { create, insert } from '@orama/orama'
+
+const db = create({
+  schema: {
+    name: 'string',
+    description: 'string',
+    price: 'number',
+    meta: {
+      rating: 'number'
+    }
+  }
+})
+
+const id = await insert(db, {
+  name: 'Noise cancelling headphones',
+  description: 'Best noise cancelling headphones on the market',
+  price: 99.99,
+  meta: {
+    rating: 4.5
+  }
+})
+```
+
+<Info>
+The `insert` method returns the document ID, which can be a user-provided string or an auto-generated unique identifier.
+</Info>
+
+## Batch Imports with insertMultiple
+
+For importing large datasets, use `insertMultiple` with batch processing for optimal performance:
+
+```javascript
+import { create, insertMultiple } from '@orama/orama'
+
+const db = create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    category: 'enum'
+  }
+})
+
+const products = [
+  { title: 'Product 1', description: 'Description 1', category: 'electronics' },
+  { title: 'Product 2', description: 'Description 2', category: 'books' },
+  // ... thousands more documents
+]
+
+// Insert with batch size control
+const ids = await insertMultiple(
+  db,
+  products,
+  1000  // Batch size: process 1000 documents at a time
+)
+```
+
+<Steps>
+  <Step title="Prepare your data">
+    Ensure all documents conform to your schema definition. Invalid documents will throw a `SCHEMA_VALIDATION_FAILURE` error.
+  </Step>
+  
+  <Step title="Choose batch size">
+    The default batch size is 1000 documents. Adjust based on your memory constraints and document size.
+  </Step>
+  
+  <Step title="Execute import">
+    Call `insertMultiple` with your document array and optional batch size parameter.
+  </Step>
+  
+  <Step title="Handle returned IDs">
+    The method returns an array of document IDs in the same order as your input documents.
+  </Step>
+</Steps>
+
+## Schema Validation
+
+Orama validates every document against your schema before insertion:
+
+```javascript packages/orama/src/methods/insert.ts
+const errorProperty = orama.validateSchema(doc, orama.schema)
+if (errorProperty) {
+  throw createError('SCHEMA_VALIDATION_FAILURE', errorProperty)
+}
+```
+
+### Supported Data Types
+
+| Type             | Description                                | Example                               |
+| ---------------- | ------------------------------------------ | ------------------------------------- |
+| `string`         | A string of characters                     | `'Hello world'`                       |
+| `number`         | Numeric value (float or integer)           | `42` or `3.14`                        |
+| `boolean`        | Boolean value                              | `true` or `false`                     |
+| `enum`           | Enumerated value                           | `'drama'`                             |
+| `geopoint`       | Geographic coordinates                     | `{ lat: 40.7128, lon: -74.0060 }`    |
+| `string[]`       | Array of strings                           | `['red', 'green', 'blue']`            |
+| `number[]`       | Array of numbers                           | `[42, 91, 28.5]`                      |
+| `boolean[]`      | Array of booleans                          | `[true, false, false]`                |
+| `enum[]`         | Array of enums                             | `['comedy', 'action', 'romance']`     |
+| `vector[<size>]` | Vector for semantic search                 | `[0.403, 0.192, 0.830]`               |
+
+## Importing with Vector Embeddings
+
+For vector and hybrid search, include embeddings in your documents:
+
+```javascript
+import { create, insertMultiple } from '@orama/orama'
+
+const db = create({
+  schema: {
+    title: 'string',
+    embedding: 'vector[512]'  // 512-dimensional embeddings
+  }
+})
+
+await insertMultiple(db, [
+  { 
+    title: 'The Prestige',
+    embedding: [0.938293, 0.284951, ...] // 512 numbers
+  },
+  { 
+    title: 'Oppenheimer',
+    embedding: [0.827391, 0.927381, ...]
+  }
+])
+```
+
+<Tip>
+Use the `@orama/plugin-embeddings` plugin to automatically generate embeddings at insert-time! See the [Plugin Embeddings](/plugins/embeddings) documentation.
+</Tip>
+
+## Custom Document IDs
+
+By default, Orama generates unique IDs. To use custom IDs, provide an `id` field:
+
+```javascript
+const db = create({
+  schema: {
+    id: 'string',
+    name: 'string'
+  }
+})
+
+await insert(db, {
+  id: 'custom-id-123',
+  name: 'Product Name'
+})
+```
+
+<Warning>
+Document IDs must be strings. Attempting to insert a document with a duplicate ID will throw a `DOCUMENT_ALREADY_EXISTS` error.
+</Warning>
+
+## Nested Schema Properties
+
+Orama supports nested object structures:
+
+```javascript
+const db = create({
+  schema: {
+    name: 'string',
+    meta: {
+      rating: 'number',
+      reviews: 'number',
+      verified: 'boolean'
+    },
+    tags: 'string[]'
+  }
+})
+
+await insert(db, {
+  name: 'Product',
+  meta: {
+    rating: 4.5,
+    reviews: 120,
+    verified: true
+  },
+  tags: ['electronics', 'new', 'featured']
+})
+```
+
+## Language-Specific Tokenization
+
+Specify the language for proper text analysis and stemming:
+
+```javascript
+import { create, insert } from '@orama/orama'
+
+const db = create({
+  schema: {
+    title: 'string',
+    content: 'string'
+  },
+  language: 'spanish'
+})
+
+// Override language for specific documents
+await insert(db, 
+  { title: 'Título', content: 'Contenido en español' },
+  'spanish'
+)
+```
+
+<Info>
+Orama supports stemming and tokenization in 30 languages. See [Text Analysis](/text-analysis) for the full list.
+</Info>
+
+## Performance Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Batch Imports" icon="layer-group">
+    Always prefer `insertMultiple` over multiple `insert` calls for better performance.
+  </Card>
+  
+  <Card title="Optimize Batch Size" icon="gauge-high">
+    The default 1000 documents per batch works well for most cases. Increase for small documents, decrease for large ones.
+  </Card>
+  
+  <Card title="Skip Hooks When Needed" icon="forward">
+    Pass `skipHooks: true` to bypass plugin hooks during bulk imports for faster insertion.
+  </Card>
+  
+  <Card title="Validate Data First" icon="shield-check">
+    Validate your data structure before importing to avoid errors mid-batch.
+  </Card>
+</CardGroup>
+
+## Advanced: Using Hooks
+
+Execute custom logic before or after insertions:
+
+```javascript
+const db = create({
+  schema: { name: 'string' },
+  plugins: [{
+    name: 'my-plugin',
+    beforeInsert: async (orama, id, doc) => {
+      console.log(`Inserting document ${id}`)
+    },
+    afterInsert: async (orama, id, doc) => {
+      console.log(`Inserted document ${id}`)
+    },
+    afterInsertMultiple: async (orama, docs) => {
+      console.log(`Inserted ${docs.length} documents`)
+    }
+  }]
+})
+```
+
+## Error Handling
+
+Handle common insertion errors gracefully:
+
+```javascript
+try {
+  await insert(db, document)
+} catch (error) {
+  if (error.code === 'SCHEMA_VALIDATION_FAILURE') {
+    console.error('Document does not match schema:', error.property)
+  } else if (error.code === 'DOCUMENT_ALREADY_EXISTS') {
+    console.error('Document with this ID already exists')
+  } else if (error.code === 'DOCUMENT_ID_MUST_BE_STRING') {
+    console.error('Document ID must be a string')
+  } else {
+    throw error
+  }
+}
+```
+
+## Importing from External Sources
+
+<Accordion title="Import from JSON file">
+```javascript
+import { readFile } from 'fs/promises'
+import { create, insertMultiple } from '@orama/orama'
+
+const data = JSON.parse(await readFile('data.json', 'utf-8'))
+const db = create({ schema: { /* your schema */ } })
+await insertMultiple(db, data, 1000)
+```
+</Accordion>
+
+<Accordion title="Import from CSV with parsing">
+```javascript
+import { parse } from 'csv-parse/sync'
+import { readFile } from 'fs/promises'
+
+const csvContent = await readFile('data.csv', 'utf-8')
+const records = parse(csvContent, { columns: true })
+await insertMultiple(db, records)
+```
+</Accordion>
+
+<Accordion title="Import from API response">
+```javascript
+const response = await fetch('https://api.example.com/products')
+const products = await response.json()
+await insertMultiple(db, products, 500)
+```
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Search Your Data" icon="magnifying-glass" href="/search/fulltext">
+    Learn how to query your imported documents
+  </Card>
+  
+  <Card title="Performance Optimization" icon="rocket" href="/guides/performance-optimization">
+    Optimize your database for better performance
+  </Card>
+  
+  <Card title="Data Persistence" icon="floppy-disk" href="/plugins/data-persistence">
+    Save and load your database state
+  </Card>
+  
+  <Card title="Vector Search" icon="brain" href="/search/vector-search">
+    Enable semantic search with embeddings
+  </Card>
+</CardGroup>

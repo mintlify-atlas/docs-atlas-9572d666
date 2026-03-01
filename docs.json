@@ -1,122 +1,178 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Orama",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#7C3AED",
+    "light": "#A78BFA",
+    "dark": "#5B21B6"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/oramasearch/orama"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/oramasearch/orama"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "core/database",
+              "core/schema",
+              "core/documents",
+              "core/components"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Search",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "search/full-text-search",
+              "search/vector-search",
+              "search/hybrid-search",
+              "search/filters",
+              "search/facets",
+              "search/geosearch",
+              "search/sorting",
+              "search/boosting",
+              "search/typo-tolerance"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Answer Engine (RAG)",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "answer-engine/overview",
+              "answer-engine/sessions",
+              "answer-engine/chat"
+            ]
+          },
+          {
+            "group": "Advanced Features",
+            "pages": [
+              "advanced/pinning",
+              "advanced/persistence",
+              "advanced/bm25",
+              "advanced/custom-components"
+            ]
+          },
+          {
+            "group": "Text Analysis",
+            "pages": [
+              "text-analysis/tokenization",
+              "text-analysis/stemming",
+              "text-analysis/stopwords",
+              "text-analysis/languages"
+            ]
+          },
+          {
+            "group": "Plugins",
+            "pages": [
+              "plugins/overview",
+              "plugins/embeddings",
+              "plugins/secure-proxy",
+              "plugins/analytics",
+              "plugins/data-persistence",
+              "plugins/match-highlight",
+              "plugins/parsedoc",
+              "plugins/writing-plugins"
+            ]
+          },
+          {
+            "group": "Framework Integrations",
+            "pages": [
+              "integrations/astro",
+              "integrations/docusaurus",
+              "integrations/vitepress",
+              "integrations/nextra"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/importing-data",
+              "guides/performance-optimization",
+              "guides/deployment",
+              "guides/migration"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Database",
             "pages": [
-              "api-reference/introduction"
+              "api/create",
+              "api/load",
+              "api/save"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Document Operations",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/insert",
+              "api/insert-multiple",
+              "api/update",
+              "api/update-multiple",
+              "api/upsert",
+              "api/upsert-multiple",
+              "api/remove",
+              "api/remove-multiple",
+              "api/count",
+              "api/get-by-id"
+            ]
+          },
+          {
+            "group": "Search Operations",
+            "pages": [
+              "api/search",
+              "api/search-vector"
+            ]
+          },
+          {
+            "group": "Pinning",
+            "pages": [
+              "api/insert-pin",
+              "api/update-pin",
+              "api/delete-pin",
+              "api/get-pin",
+              "api/get-all-pins"
+            ]
+          },
+          {
+            "group": "Answer Engine",
+            "pages": [
+              "api/answer-session"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types/schema",
+              "api/types/search-params",
+              "api/types/results",
+              "api/types/components"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

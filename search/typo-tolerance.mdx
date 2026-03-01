@@ -1,0 +1,397 @@
+---
+title: Typo Tolerance
+description: Handle misspellings and typos in search queries
+---
+
+# Typo Tolerance
+
+Typo tolerance allows Orama to find relevant results even when users make spelling mistakes. Using Levenshtein distance, Orama can match terms that are similar but not identical to the indexed content.
+
+## How Typo Tolerance Works
+
+Orama uses the [Levenshtein distance algorithm](https://en.wikipedia.org/wiki/Levenshtein_distance) to measure the similarity between the search term and indexed terms. The Levenshtein distance represents the minimum number of single-character edits (insertions, deletions, or substitutions) needed to transform one string into another.
+
+## Basic Typo Tolerance
+
+Use the `tolerance` parameter to enable typo tolerance:
+
+```javascript
+import { create, insert, search } from '@orama/orama'
+
+const db = create({
+  schema: {
+    title: 'string',
+    description: 'string'
+  }
+})
+
+insert(db, {
+  title: 'Wireless Headphones',
+  description: 'Premium wireless headphones with noise cancellation'
+})
+
+const results = search(db, {
+  term: 'hedphones',  // Typo: missing 'a'
+  tolerance: 1         // Allow 1 character difference
+})
+
+// Will match "headphones" despite the typo
+```
+
+## Tolerance Levels
+
+The `tolerance` parameter accepts numeric values indicating the maximum Levenshtein distance:
+
+<CodeGroup>
+```javascript No Tolerance (Exact Match)
+const results = search(db, {
+  term: 'hedphones',
+  tolerance: 0  // Default - no typo tolerance
+})
+// Will NOT match "headphones"
+```
+
+```javascript Tolerance of 1
+const results = search(db, {
+  term: 'hedphones',  // 1 missing character
+  tolerance: 1
+})
+// Will match "headphones"
+```
+
+```javascript Tolerance of 2
+const results = search(db, {
+  term: 'heddpones',  // 2 character differences
+  tolerance: 2
+})
+// Will match "headphones"
+```
+
+```javascript Tolerance of 3
+const results = search(db, {
+  term: 'heedfonez',  // 3 character differences
+  tolerance: 3
+})
+// Will match "headphones"
+```
+</CodeGroup>
+
+<ParamField path="tolerance" type="number" default="0">
+  Maximum Levenshtein distance between search term and indexed terms. Higher values allow more typos but may reduce precision.
+</ParamField>
+
+## Common Typo Examples
+
+### Missing Characters
+
+```javascript
+// Indexed: "headphones"
+const results = search(db, {
+  term: 'hedphones',  // Missing 'a'
+  tolerance: 1
+})
+// ✓ Matches
+```
+
+### Extra Characters
+
+```javascript
+// Indexed: "headphones"
+const results = search(db, {
+  term: 'headpphones',  // Extra 'p'
+  tolerance: 1
+})
+// ✓ Matches
+```
+
+### Substituted Characters
+
+```javascript
+// Indexed: "headphones"
+const results = search(db, {
+  term: 'headphonez',  // 's' replaced with 'z'
+  tolerance: 1
+})
+// ✓ Matches
+```
+
+### Transposed Characters
+
+```javascript
+// Indexed: "headphones"
+const results = search(db, {
+  term: 'haedphones',  // 'ea' transposed to 'ae'
+  tolerance: 2          // Requires 2 edits
+})
+// ✓ Matches
+```
+
+## Multiple Term Queries
+
+Tolerance applies to each term in multi-word queries:
+
+```javascript
+const results = search(db, {
+  term: 'wireles hedphones',  // Two typos
+  tolerance: 1
+})
+// Matches "wireless headphones"
+// - "wireles" matches "wireless" (1 edit)
+// - "hedphones" matches "headphones" (1 edit)
+```
+
+<Info>
+Each term in the query is evaluated independently with the specified tolerance level.
+</Info>
+
+## Tolerance with Property Filtering
+
+Combine typo tolerance with property-specific search:
+
+```javascript
+const results = search(db, {
+  term: 'wireles',
+  properties: ['title', 'description'],
+  tolerance: 1
+})
+```
+
+## Tolerance with Filters
+
+Use typo tolerance alongside filters:
+
+```javascript
+const results = search(db, {
+  term: 'hedphones',
+  tolerance: 1,
+  where: {
+    price: {
+      lt: 100
+    },
+    inStock: true
+  }
+})
+```
+
+## Tolerance with Boosting
+
+Combine with field boosting for prioritized fuzzy matching:
+
+```javascript
+const results = search(db, {
+  term: 'wireles hedphones',
+  tolerance: 1,
+  boost: {
+    title: 2,
+    description: 1
+  }
+})
+```
+
+## Choosing the Right Tolerance
+
+<Steps>
+  <Step title="Start with 1">
+    Tolerance of 1 handles most common typos (missing, extra, or substituted character) without sacrificing precision:
+    ```javascript
+    search(db, { term: 'query', tolerance: 1 })
+    ```
+  </Step>
+  
+  <Step title="Use 2 for Longer Terms">
+    For searches with longer terms (8+ characters), tolerance of 2 can be appropriate:
+    ```javascript
+    search(db, { term: 'accommodation', tolerance: 2 })
+    ```
+  </Step>
+  
+  <Step title="Avoid High Tolerance">
+    Tolerance of 3+ may return too many irrelevant results:
+    ```javascript
+    // May match too broadly
+    search(db, { term: 'cat', tolerance: 3 })
+    ```
+  </Step>
+  
+  <Step title="Consider Query Length">
+    Longer queries can handle higher tolerance better than short queries
+  </Step>
+</Steps>
+
+## Tolerance vs Exact Search
+
+The `exact` and `tolerance` parameters serve different purposes:
+
+<CodeGroup>
+```javascript Exact Search (Case-Sensitive)
+const results = search(db, {
+  term: 'Headphones',
+  exact: true,
+  tolerance: 0  // Exact must have tolerance 0
+})
+// Only matches exact phrase "Headphones" (case-sensitive)
+```
+
+```javascript Fuzzy Search (Typo Tolerant)
+const results = search(db, {
+  term: 'headphones',
+  exact: false,  // Default
+  tolerance: 1
+})
+// Matches "headphones", "hedphones", "headphonez", etc.
+```
+</CodeGroup>
+
+<Warning>
+The `exact` and `tolerance` parameters are mutually exclusive. When `exact: true`, tolerance must be 0.
+</Warning>
+
+## Tolerance in Hybrid Search
+
+Typo tolerance only affects the full-text search portion of hybrid search:
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'hedphones',  // Typo
+  tolerance: 1,        // Applies to full-text search
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  hybridWeights: {
+    text: 0.6,
+    vector: 0.4
+  }
+})
+```
+
+<Note>
+Vector search is not affected by the `tolerance` parameter. It uses cosine similarity for semantic matching.
+</Note>
+
+## Performance Considerations
+
+<Steps>
+  <Step title="Higher Tolerance = Slower Search">
+    Each level of tolerance increases computation time:
+    ```javascript
+    // Fast
+    search(db, { term: 'query', tolerance: 0 })
+    
+    // Slower
+    search(db, { term: 'query', tolerance: 2 })
+    ```
+  </Step>
+  
+  <Step title="Long Terms are More Expensive">
+    Fuzzy matching on longer terms requires more computation:
+    ```javascript
+    // More expensive
+    search(db, { term: 'accommodation', tolerance: 2 })
+    
+    // Less expensive
+    search(db, { term: 'hotel', tolerance: 2 })
+    ```
+  </Step>
+  
+  <Step title="Limit Search Properties">
+    Reduce properties searched to improve performance:
+    ```javascript
+    search(db, {
+      term: 'query',
+      tolerance: 1,
+      properties: ['title']  // Faster than all properties
+    })
+    ```
+  </Step>
+  
+  <Step title="Use Threshold">
+    Combine with threshold to reduce result set:
+    ```javascript
+    search(db, {
+      term: 'query',
+      tolerance: 1,
+      threshold: 1  // Require at least one match
+    })
+    ```
+  </Step>
+</Steps>
+
+## Practical Examples
+
+### E-commerce Search
+
+```javascript
+// Handle product name typos
+const results = search(db, {
+  term: 'smasung galxy',  // Multiple typos
+  tolerance: 1,
+  properties: ['name', 'brand'],
+  boost: {
+    name: 2
+  }
+})
+// Matches "Samsung Galaxy"
+```
+
+### Documentation Search
+
+```javascript
+// Handle technical term typos
+const results = search(db, {
+  term: 'authentcation',  // Missing 'i'
+  tolerance: 1,
+  properties: ['title', 'content'],
+  boost: {
+    title: 3
+  }
+})
+// Matches "authentication"
+```
+
+### User Search
+
+```javascript
+// Handle name typos
+const results = search(db, {
+  term: 'Micheal',  // Common misspelling
+  tolerance: 1,
+  properties: ['firstName', 'lastName']
+})
+// Matches "Michael"
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Moderate Tolerance" icon="gauge">
+    Tolerance of 1-2 balances flexibility and precision
+  </Card>
+  <Card title="Adjust by Use Case" icon="sliders">
+    E-commerce might use tolerance 1, spell-checkers might use 2-3
+  </Card>
+  <Card title="Test with Real Data" icon="flask">
+    Validate tolerance settings with actual user queries
+  </Card>
+  <Card title="Monitor Performance" icon="gauge-high">
+    Higher tolerance increases search time - measure impact
+  </Card>
+</CardGroup>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Full-Text Search" icon="text" href="/search/full-text-search">
+    Learn about full-text search fundamentals
+  </Card>
+  <Card title="Boosting" icon="arrow-up" href="/search/boosting">
+    Combine typo tolerance with field boosting
+  </Card>
+  <Card title="Filters" icon="filter" href="/search/filters">
+    Apply filters to fuzzy search results
+  </Card>
+  <Card title="Hybrid Search" icon="shuffle" href="/search/hybrid-search">
+    Use typo tolerance in hybrid search
+  </Card>
+</CardGroup>

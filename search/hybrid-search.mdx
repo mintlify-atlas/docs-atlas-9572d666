@@ -1,0 +1,478 @@
+---
+title: Hybrid Search
+description: Combine full-text and vector search for the best of both worlds
+---
+
+# Hybrid Search
+
+Hybrid search combines full-text and vector search to leverage both keyword matching and semantic understanding. This provides more accurate and relevant results by merging the strengths of both search modes.
+
+## Basic Hybrid Search
+
+To perform hybrid search, set the `mode` to `'hybrid'` and provide both a search term and a vector:
+
+```javascript
+import { create, insert, search, MODE_HYBRID_SEARCH } from '@orama/orama'
+
+const db = create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    embedding: 'vector[1536]'
+  }
+})
+
+insert(db, {
+  title: 'Noise cancelling headphones',
+  description: 'Best noise cancelling headphones on the market',
+  embedding: [0.2432, 0.9431, 0.5322, ...] // 1536 dimensions
+})
+
+const results = search(db, {
+  mode: MODE_HYBRID_SEARCH,
+  term: 'Noise cancelling headphones',
+  vector: {
+    value: [0.1, 0.2, 0.3, ...],
+    property: 'embedding'
+  }
+})
+```
+
+## How Hybrid Search Works
+
+Hybrid search performs both full-text and vector searches, then merges and ranks the results:
+
+<Steps>
+  <Step title="Full-Text Search">
+    Orama performs a BM25-based full-text search on string properties
+  </Step>
+  
+  <Step title="Vector Search">
+    Simultaneously performs vector similarity search on the specified embedding property
+  </Step>
+  
+  <Step title="Score Normalization">
+    Normalizes scores from both searches using min-max normalization
+  </Step>
+  
+  <Step title="Result Merging">
+    Combines results using weighted scoring based on hybrid weights
+  </Step>
+  
+  <Step title="Final Ranking">
+    Returns merged results sorted by hybrid score
+  </Step>
+</Steps>
+
+## Search Parameters
+
+### term (Required)
+
+The search term for full-text search:
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'Noise cancelling headphones',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  }
+})
+```
+
+<Note>
+Unlike vector search, `term` is **required** for hybrid search.
+</Note>
+
+### vector
+
+The vector configuration for semantic search:
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  vector: {
+    value: [0.1, 0.2, 0.3, ...],
+    property: 'embedding'
+  }
+})
+```
+
+<ParamField path="vector.value" type="number[] | Float32Array" required>
+  The embedding vector to search with
+</ParamField>
+
+<ParamField path="vector.property" type="string" required>
+  The schema property containing embeddings
+</ParamField>
+
+### hybridWeights
+
+Control the importance of full-text vs vector search results:
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  hybridWeights: {
+    text: 0.7,   // 70% weight to full-text search
+    vector: 0.3  // 30% weight to vector search
+  }
+})
+```
+
+<ParamField path="hybridWeights.text" type="number" default="0.5">
+  Weight for full-text search results (0-1). Higher values prioritize keyword matches.
+</ParamField>
+
+<ParamField path="hybridWeights.vector" type="number" default="0.5">
+  Weight for vector search results (0-1). Higher values prioritize semantic similarity.
+</ParamField>
+
+<Info>
+By default, Orama uses equal weights (0.5/0.5) for both search modes. The weights should sum to 1.0.
+</Info>
+
+### properties
+
+Specify which properties to search for full-text search:
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  properties: ['title', 'description'], // Only search these fields
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  }
+})
+```
+
+### similarity
+
+Set the minimum similarity threshold for vector search:
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  similarity: 0.8 // Default: 0.8
+})
+```
+
+### limit and offset
+
+Control pagination of hybrid search results:
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  limit: 10,  // Return 10 results (default: 10)
+  offset: 0   // Skip first 0 results (default: 0)
+})
+```
+
+### tolerance
+
+Set typo tolerance for full-text search:
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'hedphones', // Typo
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  tolerance: 1 // Allow 1 character difference
+})
+```
+
+### threshold
+
+Set the threshold for full-text search term matching:
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'Red Headphones',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  threshold: 1 // Default: 1
+})
+```
+
+<Info>
+- `threshold: 0` - Return documents containing ALL search terms
+- `threshold: 1` - Return documents containing ANY search term
+</Info>
+
+## Advanced Features
+
+### Field Boosting
+
+Give more importance to specific fields in full-text search:
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  properties: ['title', 'description'],
+  boost: {
+    title: 2 // Title matches are 2x more important
+  },
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  }
+})
+```
+
+### BM25 Relevance Tuning
+
+Customize BM25 parameters for full-text search:
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  relevance: {
+    k: 1.2,
+    b: 0.75,
+    d: 0.5
+  },
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  }
+})
+```
+
+### Including Vectors in Response
+
+Control whether to include embeddings in the response:
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  includeVectors: false // Default: false
+})
+```
+
+<Warning>
+Vectors can be very large (1536+ dimensions). Only set `includeVectors: true` if you need the actual embedding values in the response.
+</Warning>
+
+## Combining with Filters and Facets
+
+### With Filters
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  where: {
+    price: {
+      lt: 100
+    },
+    category: 'electronics'
+  }
+})
+```
+
+### With Facets
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  facets: {
+    'category': {
+      limit: 10,
+      sort: 'DESC'
+    }
+  }
+})
+```
+
+### With Grouping
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  groupBy: {
+    properties: ['category'],
+    maxResult: 5
+  }
+})
+```
+
+## Using with Plugins
+
+### Secure Proxy Plugin
+
+Automatically generate embeddings at search time:
+
+```javascript
+import { pluginSecureProxy } from '@orama/plugin-secure-proxy'
+
+const db = create({
+  schema: {
+    title: 'string',
+    embedding: 'vector[1536]'
+  },
+  plugins: [
+    await pluginSecureProxy({ 
+      apiKey: 'your-api-key',
+      defaultProperty: 'embedding' 
+    })
+  ]
+})
+
+// Plugin generates embeddings automatically
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'Noise cancelling headphones'
+  // No need to provide vector - plugin handles it
+})
+```
+
+### Embeddings Plugin
+
+Generate embeddings at insert and search time:
+
+```javascript
+import { pluginEmbeddings } from '@orama/plugin-embeddings'
+import '@tensorflow/tfjs-node'
+
+const plugin = await pluginEmbeddings({
+  embeddings: {
+    defaultProperty: 'embeddings',
+    onInsert: {
+      generate: true,
+      properties: ['title', 'description']
+    }
+  }
+})
+
+const db = create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    embeddings: 'vector[512]'
+  },
+  plugins: [plugin]
+})
+
+const results = await search(db, {
+  term: 'Headphones',
+  mode: 'hybrid'
+})
+```
+
+## Performance Considerations
+
+<Steps>
+  <Step title="Adjust Hybrid Weights">
+    If you know your use case favors keywords or semantics, adjust the weights:
+    ```javascript
+    // Keyword-heavy queries
+    hybridWeights: { text: 0.8, vector: 0.2 }
+    
+    // Semantic-heavy queries
+    hybridWeights: { text: 0.2, vector: 0.8 }
+    ```
+  </Step>
+  
+  <Step title="Limit Result Count">
+    Hybrid search is more expensive than single-mode search:
+    ```javascript
+    search(db, { mode: 'hybrid', term: '...', limit: 10 })
+    ```
+  </Step>
+  
+  <Step title="Use Property Filtering">
+    Limit full-text search to specific properties:
+    ```javascript
+    search(db, { 
+      mode: 'hybrid', 
+      properties: ['title'], // Faster than all properties
+      term: '...' 
+    })
+    ```
+  </Step>
+  
+  <Step title="Optimize Vector Dimensions">
+    Smaller embeddings (384-512) are faster than larger ones (1536+)
+  </Step>
+</Steps>
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="E-commerce Search" icon="shopping-cart">
+    Combine product name matching with semantic understanding of descriptions
+  </Card>
+  <Card title="Documentation Search" icon="book">
+    Match exact terms while understanding user intent and context
+  </Card>
+  <Card title="Content Discovery" icon="magnifying-glass">
+    Find related content through both keywords and semantic similarity
+  </Card>
+  <Card title="Support Tickets" icon="life-ring">
+    Match keywords while understanding similar issues semantically
+  </Card>
+</CardGroup>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Full-Text Search" icon="text" href="/search/full-text-search">
+    Learn about full-text search capabilities
+  </Card>
+  <Card title="Vector Search" icon="brain" href="/search/vector-search">
+    Understand vector similarity search
+  </Card>
+  <Card title="Filters" icon="filter" href="/search/filters">
+    Filter hybrid search results
+  </Card>
+  <Card title="Boosting" icon="arrow-up" href="/search/boosting">
+    Boost specific fields in hybrid search
+  </Card>
+</CardGroup>

@@ -1,0 +1,425 @@
+---
+title: getByID()
+description: Retrieve a document from an Orama database instance by its ID
+---
+
+Retrieves a single document from the Orama database by its ID. This is a direct lookup operation that doesn't involve searching or indexing.
+
+## Function Signature
+
+```typescript
+function getByID<T extends AnyOrama, ResultDocument extends TypedDocument<T>>(
+  db: T,
+  id: string
+): Optional<ResultDocument>
+```
+
+## Parameters
+
+<ParamField path="db" type="Orama" required>
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="id" type="string" required>
+  The ID of the document to retrieve.
+</ParamField>
+
+## Returns
+
+<ResponseField name="document" type="Optional<ResultDocument>">
+  The document if found, or `undefined` if no document exists with the given ID. The document type matches the database schema.
+</ResponseField>
+
+## Behavior
+
+- Synchronous operation (always returns immediately)
+- Direct lookup in the document store
+- Returns `undefined` if the document doesn't exist (does not throw an error)
+- Returns the complete document with all properties
+- Does not perform any searching or scoring
+
+## Examples
+
+### Basic Retrieval
+
+```typescript
+import { create, insert, getByID } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    description: 'string',
+    price: 'number'
+  }
+})
+
+await insert(db, {
+  id: 'product-1',
+  title: 'Wireless Headphones',
+  description: 'High-quality noise-cancelling headphones',
+  price: 199.99
+})
+
+const product = getByID(db, 'product-1')
+console.log(product)
+// {
+//   id: 'product-1',
+//   title: 'Wireless Headphones',
+//   description: 'High-quality noise-cancelling headphones',
+//   price: 199.99
+// }
+
+const notFound = getByID(db, 'product-999')
+console.log(notFound) // undefined
+```
+
+### Type-Safe Retrieval
+
+```typescript
+type Product = {
+  id: string
+  title: string
+  price: number
+  inStock: boolean
+}
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    price: 'number',
+    inStock: 'boolean'
+  }
+})
+
+const product = getByID<typeof db, Product>(db, 'product-1')
+
+if (product) {
+  // TypeScript knows the structure
+  console.log(product.title)
+  console.log(product.price)
+  console.log(product.inStock)
+}
+```
+
+### Check Existence
+
+```typescript
+const exists = (id: string): boolean => {
+  return getByID(db, id) !== undefined
+}
+
+if (exists('product-1')) {
+  console.log('Product exists')
+} else {
+  console.log('Product not found')
+}
+```
+
+### Safe Update Pattern
+
+```typescript
+const updateProduct = async (id: string, updates: Partial<Product>) => {
+  const existing = getByID(db, id)
+  
+  if (!existing) {
+    throw new Error(`Product ${id} not found`)
+  }
+  
+  return await update(db, id, {
+    ...existing,
+    ...updates
+  })
+}
+
+try {
+  await updateProduct('product-1', { price: 179.99 })
+} catch (error) {
+  console.error(error.message)
+}
+```
+
+### Conditional Insert
+
+```typescript
+const insertIfNotExists = async (doc: any) => {
+  const existing = getByID(db, doc.id)
+  
+  if (existing) {
+    console.log(`Document ${doc.id} already exists`)
+    return existing.id
+  }
+  
+  return await insert(db, doc)
+}
+
+const id = await insertIfNotExists({
+  id: 'product-1',
+  title: 'New Product'
+})
+```
+
+### Bulk Retrieval
+
+```typescript
+const getMultipleByIDs = (ids: string[]) => {
+  const results = []
+  const notFound = []
+  
+  for (const id of ids) {
+    const doc = getByID(db, id)
+    if (doc) {
+      results.push(doc)
+    } else {
+      notFound.push(id)
+    }
+  }
+  
+  return { results, notFound }
+}
+
+const { results, notFound } = getMultipleByIDs([
+  'product-1',
+  'product-2',
+  'product-999'
+])
+
+console.log(`Found: ${results.length}, Not found: ${notFound.length}`)
+```
+
+### Document Comparison
+
+```typescript
+const hasChanged = (id: string, newData: any): boolean => {
+  const current = getByID(db, id)
+  
+  if (!current) {
+    return true // New document
+  }
+  
+  return JSON.stringify(current) !== JSON.stringify({ id, ...newData })
+}
+
+if (hasChanged('product-1', { title: 'Updated Title', price: 199.99 })) {
+  console.log('Document has changed')
+}
+```
+
+### Cache Pattern
+
+```typescript
+const cache = new Map<string, any>()
+
+const getCached = (id: string) => {
+  // Check in-memory cache first
+  if (cache.has(id)) {
+    return cache.get(id)
+  }
+  
+  // Fallback to database
+  const doc = getByID(db, id)
+  
+  if (doc) {
+    cache.set(id, doc)
+  }
+  
+  return doc
+}
+
+const product = getCached('product-1')
+```
+
+### Nested Data Retrieval
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    metadata: {
+      author: 'string',
+      tags: 'string[]',
+      rating: 'number'
+    }
+  }
+})
+
+await insert(db, {
+  id: 'article-1',
+  title: 'Getting Started',
+  metadata: {
+    author: 'John Doe',
+    tags: ['tutorial', 'beginner'],
+    rating: 4.5
+  }
+})
+
+const article = getByID(db, 'article-1')
+
+if (article) {
+  console.log(article.metadata.author)
+  console.log(article.metadata.tags)
+  console.log(article.metadata.rating)
+}
+```
+
+### Export Single Document
+
+```typescript
+const exportDocument = (id: string): string | null => {
+  const doc = getByID(db, id)
+  
+  if (!doc) {
+    return null
+  }
+  
+  return JSON.stringify(doc, null, 2)
+}
+
+const json = exportDocument('product-1')
+if (json) {
+  console.log(json)
+}
+```
+
+### Audit Trail
+
+```typescript
+const getWithAudit = (id: string) => {
+  const doc = getByID(db, id)
+  
+  console.log({
+    timestamp: new Date().toISOString(),
+    action: 'READ',
+    documentId: id,
+    found: doc !== undefined
+  })
+  
+  return doc
+}
+
+const product = getWithAudit('product-1')
+```
+
+### Partial Update Helper
+
+```typescript
+const patchDocument = async <T>(id: string, patch: Partial<T>) => {
+  const current = getByID(db, id)
+  
+  if (!current) {
+    throw new Error(`Document ${id} not found`)
+  }
+  
+  const updated = {
+    ...current,
+    ...patch
+  }
+  
+  return await update(db, id, updated)
+}
+
+await patchDocument('product-1', {
+  price: 149.99,
+  inStock: true
+})
+```
+
+### Related Documents
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    relatedIds: 'string[]'
+  }
+})
+
+const getWithRelated = (id: string) => {
+  const doc = getByID(db, id)
+  
+  if (!doc) {
+    return null
+  }
+  
+  const related = doc.relatedIds
+    .map(relId => getByID(db, relId))
+    .filter(Boolean)
+  
+  return {
+    ...doc,
+    related
+  }
+}
+```
+
+### Validation Before Operation
+
+```typescript
+const validateAndRemove = async (id: string) => {
+  const doc = getByID(db, id)
+  
+  if (!doc) {
+    throw new Error('Document not found')
+  }
+  
+  // Custom validation
+  if (doc.protected === true) {
+    throw new Error('Cannot remove protected document')
+  }
+  
+  return await remove(db, id)
+}
+```
+
+## Use Cases
+
+- **Direct Access**: Retrieve documents when you know the exact ID
+- **Existence Checks**: Verify a document exists before operations
+- **Safe Updates**: Get current data before updating
+- **Caching**: Implement application-level caching
+- **Data Export**: Export specific documents
+- **Validation**: Check document state before operations
+- **Related Data**: Fetch documents referenced by ID
+- **Audit Logging**: Track document access
+
+## Performance
+
+- O(1) operation - constant time complexity
+- Direct hash map lookup in document store
+- Synchronous - returns immediately
+- Very fast, no index scanning required
+- No scoring or ranking calculations
+
+## Important Notes
+
+- Returns `undefined` for non-existent documents (doesn't throw errors)
+- Always synchronous, never returns a Promise
+- Returns the complete document, not a search result
+- The document structure matches your schema definition
+- Use for direct access; use `search()` for querying
+
+## Comparison with Search
+
+```typescript
+// getByID - Direct lookup, no scoring
+const product1 = getByID(db, 'product-1')
+
+// search - Query-based, with scoring
+const results = await search(db, {
+  term: '',
+  where: { id: 'product-1' }
+})
+const product2 = results.hits[0]?.document
+
+// getByID is faster for known IDs
+```
+
+## See Also
+
+- [insert()](/api/insert) - Insert a document
+- [update()](/api/update) - Update a document
+- [remove()](/api/remove) - Remove a document
+- [search()](/api/search) - Search for documents

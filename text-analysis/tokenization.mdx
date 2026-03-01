@@ -1,0 +1,265 @@
+---
+title: Tokenization
+description: Learn how Orama tokenizes text for efficient full-text search
+---
+
+Tokenization is the process of breaking down text into individual tokens (words or terms) that can be indexed and searched. Orama's tokenizer handles multiple languages with specialized splitting rules and normalization.
+
+## How Tokenization Works
+
+When you insert a document into Orama, the tokenizer:
+
+1. **Splits text** using language-specific regex patterns
+2. **Normalizes tokens** by converting to lowercase
+3. **Removes diacritics** (e.g., "café" becomes "cafe")
+4. **Applies stopwords filtering** (optional)
+5. **Applies stemming** (optional)
+6. **Removes duplicates** (by default)
+
+<CodeGroup>
+```typescript Basic Usage
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string'
+  }
+})
+
+// Text is automatically tokenized
+await insert(db, {
+  title: 'Building Modern Web Applications',
+  description: 'Learn how to build scalable web apps'
+})
+
+// "Building Modern Web Applications" becomes:
+// ["building", "modern", "web", "applications"]
+```
+
+```typescript Custom Configuration
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string'
+  },
+  components: {
+    tokenizer: {
+      language: 'english',
+      allowDuplicates: true,
+      tokenizeSkipProperties: ['id'],
+      stemmerSkipProperties: ['title']
+    }
+  }
+})
+```
+</CodeGroup>
+
+## Language-Specific Splitting
+
+Orama uses different regex patterns for each language to correctly identify word boundaries:
+
+<CodeGroup>
+```typescript English
+// Splits on: /[^A-Za-zàèéìòóù0-9_'-]+/gim
+const tokens = tokenizer.tokenize("It's a beautiful day!")
+// Result: ["it's", "a", "beautiful", "day"]
+```
+
+```typescript French
+// Splits on: /[^a-z0-9äâàéèëêïîöôùüûœç-]+/gim
+const tokens = tokenizer.tokenize("C'est magnifique!")
+// Result: ["c'est", "magnifique"]
+```
+
+```typescript German
+// Splits on: /[^a-z0-9A-ZäöüÄÖÜß]+/gim
+const tokens = tokenizer.tokenize("Guten Tag, schöne Welt!")
+// Result: ["guten", "tag", "schöne", "welt"]
+```
+</CodeGroup>
+
+## Diacritics Removal
+
+The tokenizer automatically removes diacritics from characters to improve search recall:
+
+```typescript
+// Input: "café résumé naïve"
+// After normalization: "cafe resume naive"
+
+// Users can search for "cafe" and find "café"
+await search(db, {
+  term: 'cafe'
+}) // Matches documents with "café" or "cafe"
+```
+
+<Note>
+Diacritics removal is automatically applied during the normalization phase. This happens after tokenization but before stemming.
+</Note>
+
+## Skipping Tokenization
+
+For certain fields like IDs or exact-match fields, you may want to skip tokenization:
+
+```typescript
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    id: 'string',
+    sku: 'string',
+    title: 'string'
+  },
+  components: {
+    tokenizer: {
+      // These properties won't be split into tokens
+      tokenizeSkipProperties: ['id', 'sku']
+    }
+  }
+})
+
+await insert(db, {
+  id: 'PROD-123-XYZ',
+  sku: 'ABC-DEF-GHI',
+  title: 'Premium Widget'
+})
+
+// "PROD-123-XYZ" is indexed as a single token
+// "Premium Widget" is tokenized to ["premium", "widget"]
+```
+
+## Duplicate Handling
+
+By default, Orama removes duplicate tokens to save memory and improve performance:
+
+```typescript
+// Default behavior (allowDuplicates: false)
+const tokens1 = tokenizer.tokenize('the best best best product')
+// Result: ["best", "product"] ("the" removed as stopword)
+
+// With duplicates enabled
+const db = await create({
+  schema: { description: 'string' },
+  components: {
+    tokenizer: {
+      allowDuplicates: true
+    }
+  }
+})
+
+const tokens2 = tokenizer.tokenize('the best best best product')
+// Result: ["best", "best", "best", "product"]
+```
+
+<Warning>
+Enabling `allowDuplicates` increases memory usage and index size. Only use it if you need to preserve term frequency for relevance scoring.
+</Warning>
+
+## Normalization Cache
+
+Orama caches normalized tokens to improve performance for repeated terms:
+
+```typescript
+// First normalization: computed and cached
+const token1 = normalizeToken('', 'running')
+// Cache key: "english::running"
+// Value: "run" (after stemming)
+
+// Second normalization: retrieved from cache
+const token2 = normalizeToken('', 'running')
+// Returns cached value immediately
+```
+
+## Advanced: Custom Tokenizer
+
+You can implement a custom tokenizer for specialized use cases:
+
+```typescript
+import { create, Tokenizer } from '@orama/orama'
+
+const customTokenizer: Tokenizer = {
+  tokenize(input: string): string[] {
+    // Custom tokenization logic
+    return input
+      .toLowerCase()
+      .split(/[\s,]+/)
+      .filter(token => token.length > 0)
+  },
+  language: 'custom',
+  normalizationCache: new Map()
+}
+
+const db = await create({
+  schema: { text: 'string' },
+  components: {
+    tokenizer: customTokenizer
+  }
+})
+```
+
+## Configuration Options
+
+<ParamField path="language" type="string" default="english">
+  The language to use for tokenization. See [Languages](/text-analysis/languages) for all supported languages.
+</ParamField>
+
+<ParamField path="allowDuplicates" type="boolean" default={false}>
+  Whether to keep duplicate tokens in the token array.
+</ParamField>
+
+<ParamField path="tokenizeSkipProperties" type="string | string[]">
+  Properties that should not be tokenized (indexed as single values).
+</ParamField>
+
+<ParamField path="stemmerSkipProperties" type="string | string[]">
+  Properties where stemming should not be applied.
+</ParamField>
+
+<ParamField path="stopWords" type="string[] | function | false">
+  Custom stopwords array, function, or `false` to disable stopwords. See [Stopwords](/text-analysis/stopwords).
+</ParamField>
+
+<ParamField path="stemming" type="boolean">
+  Enable stemming for the configured language. See [Stemming](/text-analysis/stemming).
+</ParamField>
+
+<ParamField path="stemmer" type="function">
+  Custom stemmer function. See [Stemming](/text-analysis/stemming).
+</ParamField>
+
+## Performance Considerations
+
+<AccordionGroup>
+  <Accordion title="Normalization Caching">
+    The normalization cache stores processed tokens with keys like `language:property:token`. This significantly improves performance when the same terms appear frequently.
+    
+    The cache is stored in memory and grows with unique term variations. For most applications, this is negligible, but consider the trade-off for extremely large datasets.
+  </Accordion>
+  
+  <Accordion title="Duplicate Removal">
+    Keeping `allowDuplicates: false` (default) reduces memory usage by 20-40% for typical text content, as many words appear multiple times in documents.
+  </Accordion>
+  
+  <Accordion title="Skip Properties">
+    Using `tokenizeSkipProperties` for ID fields and exact-match fields reduces index size and improves insert performance.
+  </Accordion>
+</AccordionGroup>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Stemming" icon="scissors" href="/text-analysis/stemming">
+    Learn about stemming and how it reduces words to their root form
+  </Card>
+  <Card title="Stopwords" icon="filter" href="/text-analysis/stopwords">
+    Configure stopword filtering to remove common words
+  </Card>
+  <Card title="Languages" icon="language" href="/text-analysis/languages">
+    Explore all 30+ supported languages
+  </Card>
+  <Card title="Searching" icon="magnifying-glass" href="/open-source/usage/search">
+    Learn how to search with tokenized text
+  </Card>
+</CardGroup>

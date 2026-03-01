@@ -1,0 +1,472 @@
+---
+title: Result Pinning & Merchandising
+description: Control search result order with pinning rules to promote specific documents
+icon: thumbtack
+---
+
+## Overview
+
+Result pinning allows you to promote specific documents to fixed positions in search results based on conditional matching of search terms. This is particularly useful for merchandising, featured products, or editorial control over search rankings.
+
+<Info>
+Pinning rules are evaluated during search and override the natural ranking algorithm for matched documents.
+</Info>
+
+## Core Concepts
+
+### Pin Rules
+
+A pinning rule consists of:
+
+- **ID**: Unique identifier for the rule
+- **Conditions**: Array of conditions that must match the search term
+- **Consequence**: Actions to take when conditions match (promote documents)
+
+### Anchoring Types
+
+Orama supports three anchoring strategies for matching search terms:
+
+<CardGroup cols={3}>
+  <Card title="is" icon="equals">
+    Exact match - search term must equal the pattern exactly
+  </Card>
+  <Card title="starts_with" icon="arrow-right">
+    Prefix match - search term must start with the pattern
+  </Card>
+  <Card title="contains" icon="magnifying-glass">
+    Substring match - search term must contain the pattern
+  </Card>
+</CardGroup>
+
+## Creating Pinning Rules
+
+### Basic Usage
+
+```typescript
+import { create, insert, insertPin } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    category: 'string'
+  }
+})
+
+// Insert some products
+await insert(db, { id: '1', title: 'Product A', category: 'electronics' })
+await insert(db, { id: '2', title: 'Product B', category: 'featured' })
+await insert(db, { id: '3', title: 'Product C', category: 'electronics' })
+
+// Pin Product B to position 0 when searching for "featured"
+insertPin(db, {
+  id: 'featured-products',
+  conditions: [
+    { anchoring: 'contains', pattern: 'featured' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: '2', position: 0 }
+    ]
+  }
+})
+```
+
+### Multiple Promotions
+
+You can promote multiple documents in a single rule:
+
+```typescript
+insertPin(db, {
+  id: 'holiday-sale',
+  conditions: [
+    { anchoring: 'contains', pattern: 'sale' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: 'winter-jacket', position: 0 },
+      { doc_id: 'winter-boots', position: 1 },
+      { doc_id: 'winter-gloves', position: 2 }
+    ]
+  }
+})
+```
+
+### Multiple Conditions
+
+All conditions must match (AND logic) for the rule to apply:
+
+```typescript
+insertPin(db, {
+  id: 'premium-laptops',
+  conditions: [
+    { anchoring: 'contains', pattern: 'laptop' },
+    { anchoring: 'contains', pattern: 'premium' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: 'macbook-pro', position: 0 }
+    ]
+  }
+})
+```
+
+<Note>
+When multiple conditions are specified, ALL conditions must be satisfied for the rule to trigger.
+</Note>
+
+## Managing Rules
+
+### Update Existing Rules
+
+```typescript
+import { updatePin } from '@orama/orama'
+
+// Update the rule to promote different documents
+updatePin(db, {
+  id: 'featured-products',
+  conditions: [
+    { anchoring: 'contains', pattern: 'featured' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: '3', position: 0 }  // Changed to Product C
+    ]
+  }
+})
+```
+
+### Delete Rules
+
+```typescript
+import { deletePin } from '@orama/orama'
+
+// Remove a pinning rule
+const deleted = deletePin(db, 'featured-products')
+console.log(deleted) // true if rule was found and deleted
+```
+
+### Retrieve Rules
+
+```typescript
+import { getPin, getAllPins } from '@orama/orama'
+
+// Get a specific rule
+const rule = getPin(db, 'featured-products')
+console.log(rule)
+
+// Get all rules
+const allRules = getAllPins(db)
+console.log(`Total rules: ${allRules.length}`)
+```
+
+## Anchoring Strategies
+
+### Exact Match (is)
+
+Use when you want to pin results only for exact search terms:
+
+```typescript
+insertPin(db, {
+  id: 'brand-search',
+  conditions: [
+    { anchoring: 'is', pattern: 'apple' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: 'apple-homepage', position: 0 }
+    ]
+  }
+})
+
+// Matches: "apple"
+// Does not match: "apple iphone", "green apple"
+```
+
+### Prefix Match (starts_with)
+
+Use for category or prefix-based merchandising:
+
+```typescript
+insertPin(db, {
+  id: 'iphone-models',
+  conditions: [
+    { anchoring: 'starts_with', pattern: 'iphone' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: 'iphone-15-pro', position: 0 }
+    ]
+  }
+})
+
+// Matches: "iphone", "iphone 15", "iphone pro"
+// Does not match: "apple iphone", "new iphone"
+```
+
+### Substring Match (contains)
+
+Most flexible option for keyword-based pinning:
+
+```typescript
+insertPin(db, {
+  id: 'summer-collection',
+  conditions: [
+    { anchoring: 'contains', pattern: 'summer' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: 'summer-sale-landing', position: 0 }
+    ]
+  }
+})
+
+// Matches: "summer", "summer sale", "hot summer deals"
+```
+
+## E-commerce Example
+
+```typescript
+import { create, insert, insertPin, search } from '@orama/orama'
+
+const catalog = await create({
+  schema: {
+    id: 'string',
+    name: 'string',
+    category: 'string',
+    price: 'number'
+  }
+})
+
+// Insert products
+await insert(catalog, { id: 'laptop-1', name: 'Standard Laptop', category: 'electronics', price: 699 })
+await insert(catalog, { id: 'laptop-2', name: 'Premium Laptop', category: 'electronics', price: 1299 })
+await insert(catalog, { id: 'laptop-3', name: 'Budget Laptop', category: 'electronics', price: 399 })
+
+// Pin premium laptop for "best laptop" searches
+insertPin(catalog, {
+  id: 'best-laptop-merchandising',
+  conditions: [
+    { anchoring: 'contains', pattern: 'best' },
+    { anchoring: 'contains', pattern: 'laptop' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: 'laptop-2', position: 0 }
+    ]
+  }
+})
+
+// Pin budget option for "cheap laptop" searches
+insertPin(catalog, {
+  id: 'budget-laptop-merchandising',
+  conditions: [
+    { anchoring: 'contains', pattern: 'cheap' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: 'laptop-3', position: 0 }
+    ]
+  }
+})
+
+const results = await search(catalog, {
+  term: 'best laptop'
+})
+
+// Premium Laptop will be at position 0
+console.log(results.hits[0].document.name) // "Premium Laptop"
+```
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="E-commerce Merchandising">
+    Promote seasonal products, sales items, or high-margin products for specific search terms.
+    
+    ```typescript
+    insertPin(db, {
+      id: 'black-friday-deals',
+      conditions: [{ anchoring: 'contains', pattern: 'black friday' }],
+      consequence: {
+        promote: [
+          { doc_id: 'bf-landing-page', position: 0 },
+          { doc_id: 'bf-top-deal-1', position: 1 },
+          { doc_id: 'bf-top-deal-2', position: 2 }
+        ]
+      }
+    })
+    ```
+  </Accordion>
+  
+  <Accordion title="Content Editorial Control">
+    Feature specific articles or content for trending topics.
+    
+    ```typescript
+    insertPin(db, {
+      id: 'breaking-news',
+      conditions: [{ anchoring: 'contains', pattern: 'breaking' }],
+      consequence: {
+        promote: [{ doc_id: 'latest-breaking-story', position: 0 }]
+      }
+    })
+    ```
+  </Accordion>
+  
+  <Accordion title="Brand Management">
+    Control brand search results and ensure official pages appear first.
+    
+    ```typescript
+    insertPin(db, {
+      id: 'brand-official',
+      conditions: [{ anchoring: 'is', pattern: 'nike' }],
+      consequence: {
+        promote: [
+          { doc_id: 'nike-homepage', position: 0 },
+          { doc_id: 'nike-about', position: 1 }
+        ]
+      }
+    })
+    ```
+  </Accordion>
+  
+  <Accordion title="Search Intent Optimization">
+    Guide users to the most relevant content based on search intent.
+    
+    ```typescript
+    insertPin(db, {
+      id: 'how-to-guides',
+      conditions: [{ anchoring: 'starts_with', pattern: 'how to' }],
+      consequence: {
+        promote: [{ doc_id: 'tutorial-index', position: 0 }]
+      }
+    })
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Steps>
+  <Step title="Use Specific Patterns">
+    Make your patterns as specific as possible to avoid unintended matches. Use multiple conditions when needed.
+  </Step>
+  
+  <Step title="Monitor Performance">
+    Track which pinning rules are triggering most frequently and adjust based on user behavior.
+  </Step>
+  
+  <Step title="Limit Promotions">
+    Don't promote too many documents in a single rule. Focus on top 3-5 most relevant items.
+  </Step>
+  
+  <Step title="Test Thoroughly">
+    Test your pinning rules with various search terms to ensure they behave as expected.
+  </Step>
+  
+  <Step title="Document Your Rules">
+    Keep track of why each rule was created and when it should be updated or removed.
+  </Step>
+</Steps>
+
+<Warning>
+Pinning rules override natural search rankings. Use them judiciously to maintain search quality and user trust.
+</Warning>
+
+## Error Handling
+
+Orama provides clear error messages for common pinning issues:
+
+```typescript
+try {
+  // Attempting to insert a duplicate rule
+  insertPin(db, {
+    id: 'existing-rule',
+    conditions: [{ anchoring: 'contains', pattern: 'test' }],
+    consequence: { promote: [{ doc_id: '1', position: 0 }] }
+  })
+} catch (error) {
+  console.error(error.message)
+  // "PINNING_RULE_ALREADY_EXISTS: A pinning rule with id 'existing-rule' 
+  // already exists. Use updateRule to modify it."
+}
+
+try {
+  // Attempting to update a non-existent rule
+  updatePin(db, {
+    id: 'non-existent',
+    conditions: [{ anchoring: 'contains', pattern: 'test' }],
+    consequence: { promote: [{ doc_id: '1', position: 0 }] }
+  })
+} catch (error) {
+  console.error(error.message)
+  // "PINNING_RULE_NOT_FOUND: Cannot update pinning rule with id 'non-existent' 
+  // because it does not exist. Use addRule to create it."
+}
+```
+
+## API Reference
+
+### insertPin
+
+Inserts a new pinning rule into the database.
+
+```typescript
+function insertPin<T extends AnyOrama>(orama: T, rule: PinRule): void
+```
+
+### updatePin
+
+Updates an existing pinning rule.
+
+```typescript
+function updatePin<T extends AnyOrama>(orama: T, rule: PinRule): void
+```
+
+### deletePin
+
+Removes a pinning rule by ID.
+
+```typescript
+function deletePin<T extends AnyOrama>(orama: T, ruleId: string): boolean
+```
+
+### getPin
+
+Retrieves a specific pinning rule by ID.
+
+```typescript
+function getPin<T extends AnyOrama>(orama: T, ruleId: string): PinRule | undefined
+```
+
+### getAllPins
+
+Retrieves all pinning rules.
+
+```typescript
+function getAllPins<T extends AnyOrama>(orama: T): PinRule[]
+```
+
+## Type Definitions
+
+```typescript
+type PinAnchoring = 'is' | 'starts_with' | 'contains'
+
+interface PinCondition {
+  anchoring: PinAnchoring
+  pattern: string
+}
+
+interface PinPromotion {
+  doc_id: DocumentID
+  position: number
+}
+
+interface PinRule {
+  id: string
+  conditions: PinCondition[]
+  consequence: {
+    promote: PinPromotion[]
+  }
+}
+```

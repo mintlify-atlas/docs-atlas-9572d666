@@ -1,0 +1,382 @@
+---
+title: Docusaurus Integration
+description: Add Orama search to your Docusaurus v3 site with cloud or local search capabilities
+---
+
+The Orama Docusaurus plugin provides a powerful search experience for Docusaurus v3 sites, with support for both local (OSS) and cloud-based search.
+
+## Installation
+
+Install the plugin using your preferred package manager:
+
+<CodeGroup>
+
+```bash npm
+npm install @orama/plugin-docusaurus-v3
+```
+
+```bash yarn
+yarn add @orama/plugin-docusaurus-v3
+```
+
+```bash pnpm
+pnpm add @orama/plugin-docusaurus-v3
+```
+
+</CodeGroup>
+
+<Note>
+  For Docusaurus v2, use the legacy `@orama/plugin-docusaurus` package instead.
+</Note>
+
+## Configuration
+
+Add the plugin to your `docusaurus.config.js` file:
+
+```javascript docusaurus.config.js
+module.exports = {
+  // ... other config
+  plugins: [
+    [
+      '@orama/plugin-docusaurus-v3',
+      {
+        // Plugin options here
+      }
+    ]
+  ],
+  // ... other config
+}
+```
+
+## Local Search (OSS Mode)
+
+For local search without cloud dependencies, use the basic configuration:
+
+```javascript docusaurus.config.js
+module.exports = {
+  plugins: [
+    [
+      '@orama/plugin-docusaurus-v3',
+      {
+        searchbox: {
+          placeholder: 'Search documentation...'
+        },
+        searchButton: {
+          label: 'Search'
+        }
+      }
+    ]
+  ]
+}
+```
+
+This configuration:
+- Indexes all docs, blog posts, and pages during build
+- Creates a compressed search index (`.json.gz` format)
+- Provides instant client-side search
+- Works completely offline
+
+## Cloud Search
+
+For cloud-powered search with Orama Cloud, add cloud configuration:
+
+```javascript docusaurus.config.js
+module.exports = {
+  plugins: [
+    [
+      '@orama/plugin-docusaurus-v3',
+      {
+        cloud: {
+          // For Orama Cloud v1 (legacy)
+          indexId: 'your-index-id',
+          apiKey: 'your-public-api-key',
+          
+          // For Orama Cloud v2 (Collections)
+          collectionId: 'your-collection-id',
+          apiKey: 'your-public-api-key',
+          
+          // Optional: deployment strategy
+          deploy: 'default' // or 'snapshot-only'
+        },
+        searchbox: {
+          placeholder: 'Search documentation...'
+        }
+      }
+    ]
+  ]
+}
+```
+
+### Deploy Types
+
+<ParamField path="deploy" type="string" default="default">
+  Controls how the index is deployed to Orama Cloud:
+  
+  - `default`: Resets and deploys the index automatically after build
+  - `snapshot-only`: Only creates a snapshot without deploying
+</ParamField>
+
+## Configuration Options
+
+### Cloud Configuration
+
+<ParamField path="cloud.indexId" type="string">
+  Your Orama Cloud index ID (legacy v1). Required if not using `collectionId`.
+</ParamField>
+
+<ParamField path="cloud.collectionId" type="string">
+  Your Orama Cloud collection ID (v2). Required if not using `indexId`.
+</ParamField>
+
+<ParamField path="cloud.apiKey" type="string" required>
+  Your Orama Cloud public API key for search operations.
+</ParamField>
+
+<ParamField path="cloud.deploy" type="'default' | 'snapshot-only'" default="default">
+  Deployment strategy for the search index.
+</ParamField>
+
+### Search UI Configuration
+
+<ParamField path="searchbox" type="object">
+  Configuration for the search input component. Accepts any options from the Orama Searchbox component.
+  
+  ```javascript
+  searchbox: {
+    placeholder: 'Search...',
+    themeConfig: {
+      light: 'system',
+      dark: 'system'
+    }
+  }
+  ```
+</ParamField>
+
+<ParamField path="searchButton" type="object">
+  Configuration for the search button that triggers the search modal.
+  
+  ```javascript
+  searchButton: {
+    label: 'Search',
+    buttonIcon: '🔍'
+  }
+  ```
+</ParamField>
+
+### Analytics Configuration
+
+<ParamField path="plugins.analytics" type="object">
+  Enable analytics tracking for search queries.
+  
+  ```javascript
+  plugins: {
+    analytics: {
+      enabled: true,
+      apiKey: 'your-analytics-api-key',
+      indexId: 'your-index-id'
+    }
+  }
+  ```
+</ParamField>
+
+## What Gets Indexed
+
+The plugin automatically indexes content from:
+
+<Tabs>
+  <Tab title="Documentation">
+    All documentation pages from `@docusaurus/plugin-content-docs`, including:
+    - Page titles
+    - Headings (h1-h6)
+    - Content sections
+    - Version information
+    - Category metadata
+  </Tab>
+  
+  <Tab title="Blog Posts">
+    All blog posts from `@docusaurus/plugin-content-blog`, including:
+    - Post titles
+    - Post content
+    - Metadata
+    - Permalinks
+  </Tab>
+  
+  <Tab title="Pages">
+    All pages from `@docusaurus/plugin-content-pages`, including:
+    - Page titles
+    - Content
+    - Custom metadata
+  </Tab>
+</Tabs>
+
+## Search Index Structure
+
+Each indexed document includes:
+
+```typescript
+interface OramaDoc {
+  title: string        // Section or page title
+  content: string      // Extracted text content
+  path: string         // URL path to the content
+  section: string      // Parent page title
+  category: string     // Content type (docs/blogs/pages)
+  version: string      // Doc version (if applicable)
+}
+```
+
+## Advanced Usage
+
+### Custom Search Configuration
+
+Customize the search behavior with advanced options:
+
+```javascript docusaurus.config.js
+module.exports = {
+  plugins: [
+    [
+      '@orama/plugin-docusaurus-v3',
+      {
+        searchbox: {
+          placeholder: 'Search documentation...',
+          // Facets for filtering results
+          facetFilters: [
+            {
+              field: 'category',
+              label: 'Category'
+            },
+            {
+              field: 'version',
+              label: 'Version'
+            }
+          ],
+          // Customize result display
+          resultsMap: {
+            title: 'title',
+            description: 'content',
+            section: 'section'
+          },
+          // Set default limit
+          limit: 10
+        }
+      }
+    ]
+  ]
+}
+```
+
+### Environment Variables
+
+For security, use environment variables for sensitive data:
+
+```javascript docusaurus.config.js
+module.exports = {
+  plugins: [
+    [
+      '@orama/plugin-docusaurus-v3',
+      {
+        cloud: {
+          indexId: process.env.ORAMA_INDEX_ID,
+          apiKey: process.env.ORAMA_PUBLIC_API_KEY,
+          collectionId: process.env.ORAMA_COLLECTION_ID
+        }
+      }
+    ]
+  ]
+}
+```
+
+<Warning>
+  Only use **public** API keys in client-side configuration. Never expose private API keys in your Docusaurus config.
+</Warning>
+
+## Build Process
+
+The plugin hooks into the Docusaurus build lifecycle:
+
+1. **Content Loading**: Extracts content from all docs, blogs, and pages
+2. **Markdown Parsing**: Converts markdown to HTML and extracts sections
+3. **Index Creation**: Builds the search index with all extracted content
+4. **Compression**: Creates a gzipped index file for optimal performance
+5. **Deployment**: Optionally syncs the index to Orama Cloud
+
+### Build Output
+
+For OSS mode, the plugin generates:
+```
+build/
+  └── orama-search-index-current.json.gz
+```
+
+## Theme Integration
+
+The plugin automatically integrates with the Docusaurus theme:
+
+- Replaces the default search bar
+- Provides custom styling that matches your theme
+- Supports light and dark mode
+- Responsive design for mobile and desktop
+
+## Local Development
+
+When developing locally with the plugin:
+
+```bash
+pnpm install
+pnpm start
+```
+
+The search functionality is only fully available after running a production build:
+
+```bash
+pnpm build
+pnpm serve
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Search not working after build">
+    Ensure the search index file is being generated in your build output. Check the `build/` directory for `orama-search-index-current.json.gz`.
+  </Accordion>
+  
+  <Accordion title="Cloud deployment fails">
+    Verify your API key and index ID are correct. Check that your API key has the necessary permissions for deploying indexes.
+  </Accordion>
+  
+  <Accordion title="Search results are empty">
+    Make sure your content has actual text to index. Check that your markdown files contain searchable content beyond just frontmatter.
+  </Accordion>
+</AccordionGroup>
+
+## Package Information
+
+- **Package Name:** `@orama/plugin-docusaurus-v3`
+- **Version:** 3.1.18
+- **License:** Apache-2.0
+- **Repository:** [github.com/oramasearch/orama](https://github.com/oramasearch/orama)
+
+## Requirements
+
+- Docusaurus v3.x
+- Node.js >= 16
+- Peer dependencies:
+  - `@docusaurus/plugin-content-docs` ^3
+  - `@docusaurus/theme-common` ^3
+  - `@docusaurus/utils` ^3
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Orama Cloud" icon="cloud" href="/cloud/overview">
+    Learn more about Orama Cloud features
+  </Card>
+  <Card title="Search Analytics" icon="chart-line" href="/cloud/analytics">
+    Track and analyze search behavior
+  </Card>
+  <Card title="React Components" icon="react" href="/open-source/plugins/react-components">
+    Customize the search UI
+  </Card>
+  <Card title="Full Documentation" icon="book" href="https://docs.orama.com/cloud/data-sources/native-integrations/docusaurus">
+    View the complete Docusaurus guide
+  </Card>
+</CardGroup>

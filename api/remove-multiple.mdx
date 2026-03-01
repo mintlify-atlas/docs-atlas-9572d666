@@ -1,0 +1,372 @@
+---
+title: removeMultiple()
+description: Remove multiple documents from an Orama database instance
+---
+
+Removes multiple documents from the Orama database in batches. This method is more efficient than calling `remove()` multiple times.
+
+## Function Signature
+
+```typescript
+function removeMultiple<T extends AnyOrama>(
+  orama: T,
+  ids: DocumentID[],
+  batchSize?: number,
+  language?: string,
+  skipHooks?: boolean
+): Promise<number> | number
+```
+
+## Parameters
+
+<ParamField path="orama" type="Orama" required>
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="ids" type="DocumentID[]" required>
+  Array of document IDs to remove.
+</ParamField>
+
+<ParamField path="batchSize" type="number" default="1000">
+  Number of documents to process in each batch.
+</ParamField>
+
+<ParamField path="language" type="string">
+  Optional language used when the documents were indexed.
+</ParamField>
+
+<ParamField path="skipHooks" type="boolean" default="false">
+  If true, skips executing individual remove hooks and beforeRemoveMultiple/afterRemoveMultiple hooks.
+</ParamField>
+
+## Returns
+
+<ResponseField name="count" type="number | Promise<number>">
+  The number of documents successfully removed. Returns a Promise if async operations are required.
+</ResponseField>
+
+## Behavior
+
+- Triggers `beforeRemoveMultiple` hook with all document IDs (if not skipped)
+- Processes documents in batches using `setTimeout` to prevent blocking
+- Calls `remove()` for each document ID
+- Counts successful removals (documents that exist and are removed)
+- Non-existent document IDs are silently skipped (not counted as errors)
+- Triggers `afterRemoveMultiple` hook with all document IDs (if not skipped)
+- Automatically determines whether to run synchronously or asynchronously
+
+## Examples
+
+### Basic Batch Remove
+
+```typescript
+import { create, insertMultiple, removeMultiple } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    category: 'string'
+  }
+})
+
+await insertMultiple(db, [
+  { id: 'p1', title: 'Product 1', category: 'A' },
+  { id: 'p2', title: 'Product 2', category: 'B' },
+  { id: 'p3', title: 'Product 3', category: 'A' },
+  { id: 'p4', title: 'Product 4', category: 'B' }
+])
+
+const removed = await removeMultiple(db, ['p1', 'p2', 'p3'])
+console.log(`Removed ${removed} documents`) // Removed 3 documents
+```
+
+### Remove by Search Results
+
+```typescript
+import { search, removeMultiple } from '@orama/orama'
+
+const removeByCategory = async (category: string) => {
+  const results = await search(db, {
+    term: '',
+    where: { category }
+  })
+  
+  const ids = results.hits.map(hit => hit.id)
+  const removed = await removeMultiple(db, ids)
+  
+  console.log(`Removed ${removed} of ${results.count} documents`)
+  return removed
+}
+
+await removeByCategory('Electronics')
+```
+
+### Clear Outdated Documents
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    expiresAt: 'string'
+  }
+})
+
+const removeExpired = async () => {
+  const results = await search(db, {
+    term: '',
+    where: {
+      expiresAt: {
+        lt: Date.now()
+      }
+    }
+  })
+  
+  const ids = results.hits.map(hit => hit.id)
+  return await removeMultiple(db, ids)
+}
+
+const removed = await removeExpired()
+console.log(`Cleaned up ${removed} expired documents`)
+```
+
+### Batch Delete with Custom Size
+
+```typescript
+// Process 500 documents at a time
+const largeIdList = Array.from({ length: 10000 }, (_, i) => `doc-${i}`)
+
+const removed = await removeMultiple(db, largeIdList, 500)
+console.log(`Removed ${removed} documents in batches of 500`)
+```
+
+### Remove with Statistics
+
+```typescript
+const removeWithStats = async (ids: string[]) => {
+  const startTime = Date.now()
+  const initialCount = await count(db)
+  
+  const removed = await removeMultiple(db, ids)
+  
+  const endTime = Date.now()
+  const finalCount = await count(db)
+  
+  return {
+    requested: ids.length,
+    removed,
+    notFound: ids.length - removed,
+    remainingDocs: finalCount,
+    duration: endTime - startTime
+  }
+}
+
+const stats = await removeWithStats(['p1', 'p2', 'p999'])
+console.log(stats)
+// {
+//   requested: 3,
+//   removed: 2,
+//   notFound: 1,
+//   remainingDocs: 10,
+//   duration: 45
+// }
+```
+
+### Cleanup User Data
+
+```typescript
+const deleteUserContent = async (userId: string) => {
+  // Find all documents belonging to user
+  const results = await search(db, {
+    term: '',
+    where: { userId }
+  })
+  
+  const documentIds = results.hits.map(hit => hit.id)
+  
+  // Remove all documents
+  const removed = await removeMultiple(db, documentIds)
+  
+  return {
+    userId,
+    documentsRemoved: removed,
+    documentsFound: results.count
+  }
+}
+
+await deleteUserContent('user-123')
+```
+
+### Selective Removal
+
+```typescript
+const removeMatchingCondition = async (condition: (doc: any) => boolean) => {
+  const allResults = await search(db, { term: '' })
+  
+  const idsToRemove = allResults.hits
+    .filter(hit => condition(hit.document))
+    .map(hit => hit.id)
+  
+  return await removeMultiple(db, idsToRemove)
+}
+
+// Remove all products with price > 1000
+const removed = await removeMatchingCondition(
+  doc => doc.price > 1000
+)
+```
+
+### Paginated Removal
+
+```typescript
+const removeAllInBatches = async (category: string, batchSize = 100) => {
+  let totalRemoved = 0
+  let hasMore = true
+  
+  while (hasMore) {
+    const results = await search(db, {
+      term: '',
+      where: { category },
+      limit: batchSize
+    })
+    
+    if (results.hits.length === 0) {
+      hasMore = false
+      break
+    }
+    
+    const ids = results.hits.map(hit => hit.id)
+    const removed = await removeMultiple(db, ids, batchSize)
+    totalRemoved += removed
+    
+    console.log(`Progress: ${totalRemoved} documents removed`)
+    
+    // Small delay to prevent blocking
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  
+  return totalRemoved
+}
+
+await removeAllInBatches('TempData', 200)
+```
+
+### Archive and Remove
+
+```typescript
+const archive = new Map()
+
+const archiveAndRemove = async (ids: string[]) => {
+  // Retrieve documents before removal
+  const docs = await Promise.all(
+    ids.map(async id => ({
+      id,
+      doc: await getByID(db, id)
+    }))
+  )
+  
+  // Store in archive
+  docs.forEach(({ id, doc }) => {
+    if (doc) {
+      archive.set(id, {
+        ...doc,
+        archivedAt: new Date().toISOString()
+      })
+    }
+  })
+  
+  // Remove from database
+  return await removeMultiple(db, ids)
+}
+
+const removed = await archiveAndRemove(['p1', 'p2', 'p3'])
+console.log(`Archived and removed ${removed} documents`)
+```
+
+### Remove with Retry Logic
+
+```typescript
+const removeWithRetry = async (
+  ids: string[],
+  maxRetries = 3
+): Promise<number> => {
+  let attempt = 0
+  let lastError
+  
+  while (attempt < maxRetries) {
+    try {
+      return await removeMultiple(db, ids)
+    } catch (error) {
+      lastError = error
+      attempt++
+      console.log(`Retry ${attempt}/${maxRetries}`)
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+    }
+  }
+  
+  throw lastError
+}
+
+const removed = await removeWithRetry(['p1', 'p2', 'p3'])
+```
+
+### Cascading Delete
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    type: 'string',
+    parentId: 'string',
+    title: 'string'
+  }
+})
+
+const cascadeDelete = async (parentId: string) => {
+  // Find all children
+  const children = await search(db, {
+    term: '',
+    where: { parentId }
+  })
+  
+  const childIds = children.hits.map(hit => hit.id)
+  
+  // Remove children first
+  const childrenRemoved = await removeMultiple(db, childIds)
+  
+  // Remove parent
+  const parentRemoved = await remove(db, parentId)
+  
+  return {
+    parent: parentRemoved ? 1 : 0,
+    children: childrenRemoved,
+    total: childrenRemoved + (parentRemoved ? 1 : 0)
+  }
+}
+
+const result = await cascadeDelete('parent-1')
+console.log(`Total removed: ${result.total}`)
+```
+
+## Performance Tips
+
+- Use larger batch sizes for better performance with large datasets
+- The function uses `setTimeout` internally to prevent blocking the event loop
+- Non-existent IDs are gracefully handled and don't affect performance
+- Consider the impact on indexes - removing documents updates all relevant indexes
+
+## Important Notes
+
+- Returns the count of successfully removed documents, not a boolean
+- Non-existent document IDs are silently skipped
+- The operation processes batches asynchronously to prevent blocking
+- All hooks receive the list of document IDs (not document data)
+- For very large removals, consider processing in multiple calls with monitoring
+
+## See Also
+
+- [remove()](/api/remove) - Remove a single document
+- [insertMultiple()](/api/insert-multiple) - Insert multiple documents
+- [updateMultiple()](/api/update-multiple) - Update multiple documents
+- [count()](/api/count) - Count total documents

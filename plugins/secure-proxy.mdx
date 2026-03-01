@@ -1,0 +1,444 @@
+---
+title: 'Secure Proxy Plugin'
+description: 'Cloud-based embeddings and LLM features with secure API proxy from Orama Cloud'
+icon: 'shield-check'
+---
+
+## Overview
+
+The Orama Secure Proxy Plugin provides secure, cloud-based embeddings generation and LLM features for your Orama instances. It allows you to use state-of-the-art embedding models and chat models without exposing API keys on the client side.
+
+<Info>
+  This plugin requires an [Orama Cloud](https://cloud.orama.com) account (free tier available).
+</Info>
+
+## Features
+
+- **Secure API Proxy**: Your API keys never leave Orama Cloud
+- **Multiple Embedding Models**: Choose from Orama and OpenAI models
+- **Chat Integration**: Built-in support for LLM chat models
+- **Auto-generation**: Automatically generate embeddings at insert time
+- **Client-Safe**: Use in browsers and mobile apps without exposing credentials
+
+## Installation
+
+```bash
+npm install @orama/plugin-secure-proxy
+```
+
+## Getting Started
+
+### 1. Get Your API Key
+
+Sign up for a free account at [https://cloud.orama.com](https://cloud.orama.com) and obtain your API key.
+
+### 2. Configure the Plugin
+
+```javascript
+import { create, insert, search } from '@orama/orama'
+import { pluginSecureProxy } from '@orama/plugin-secure-proxy'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    embeddings: 'vector[384]'
+  },
+  plugins: [
+    pluginSecureProxy({
+      apiKey: 'your-api-key',
+      embeddings: {
+        defaultProperty: 'embeddings',
+        model: 'orama/gte-small',
+        onInsert: {
+          generate: true,
+          properties: ['title', 'description'],
+          verbose: false
+        }
+      },
+      chat: {
+        model: 'openai/gpt-4o'
+      }
+    })
+  ]
+})
+```
+
+## Configuration
+
+### Plugin Options
+
+<ParamField path="apiKey" type="string" required>
+  Your Orama Cloud API key
+</ParamField>
+
+<ParamField path="embeddings" type="object" required>
+  Configuration for embeddings generation
+  
+  <Expandable title="properties">
+    <ParamField path="defaultProperty" type="string" required>
+      The property name where generated embeddings will be stored
+    </ParamField>
+    
+    <ParamField path="model" type="string" required>
+      The embedding model to use. See [Available Embedding Models](#available-embedding-models)
+    </ParamField>
+    
+    <ParamField path="onInsert" type="object">
+      Configure embeddings generation at insert time
+      
+      <Expandable title="properties">
+        <ParamField path="generate" type="boolean" required>
+          Whether to generate embeddings when inserting documents
+        </ParamField>
+        
+        <ParamField path="properties" type="string[]" required>
+          Array of document properties to use for generating embeddings
+        </ParamField>
+        
+        <ParamField path="verbose" type="boolean" default="false">
+          Log embedding generation details to console
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="chat" type="object">
+  Configuration for chat/LLM features
+  
+  <Expandable title="properties">
+    <ParamField path="model" type="string" required>
+      The chat model to use. See [Available Chat Models](#available-chat-models)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Available Embedding Models
+
+<Tabs>
+  <Tab title="Orama Models">
+    | Model Name | Provider | Dimensions | Use Case |
+    |------------|----------|------------|----------|
+    | `orama/gte-small` | Orama | 384 | Best for most applications, fast and efficient |
+    | `orama/gte-medium` | Orama | 768 | Higher quality embeddings, more compute |
+    | `orama/gte-large` | Orama | 1024 | Best quality, most compute intensive |
+    
+    <Info>
+      Orama models are optimized for search and offer the best price/performance ratio.
+    </Info>
+  </Tab>
+  
+  <Tab title="OpenAI Models">
+    | Model Name | Provider | Dimensions | Use Case |
+    |------------|----------|------------|----------|
+    | `openai/text-embedding-ada-002` | OpenAI | 1536 | Legacy model, widely tested |
+    | `openai/text-embedding-3-small` | OpenAI | 1536 | Latest small model from OpenAI |
+    | `openai/text-embedding-3-large` | OpenAI | 3072 | Highest quality OpenAI embeddings |
+    
+    <Warning>
+      OpenAI models may incur higher costs than Orama models.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Available Chat Models
+
+| Model Name | Provider | Description |
+|------------|----------|-------------|
+| `openai/gpt-4o` | OpenAI | Latest and most capable GPT-4 model |
+| `openai/gpt-4o-mini` | OpenAI | Smaller, faster GPT-4 variant |
+| `openai/gpt-4-turbo` | OpenAI | Fast GPT-4 with large context window |
+| `openai/gpt-4` | OpenAI | Standard GPT-4 model |
+| `openai/gpt-3.5-turbo` | OpenAI | Fast and cost-effective |
+
+<Note>
+  More models coming soon! Check the [Orama Cloud documentation](https://docs.orama.com) for the latest available models.
+</Note>
+
+## Usage Examples
+
+### Insert with Auto-Generated Embeddings
+
+```javascript
+// Embeddings are automatically generated from title and description
+await insert(db, {
+  title: 'Wireless Noise-Cancelling Headphones',
+  description: 'Premium over-ear headphones with active noise cancellation and 30-hour battery life'
+})
+
+await insert(db, {
+  title: 'USB-C Fast Charger',
+  description: 'Compact 65W power adapter with GaN technology for laptops and phones'
+})
+```
+
+### Vector Search
+
+```javascript
+const results = await search(db, {
+  term: 'headphones for studying',
+  mode: 'vector',
+  limit: 10
+})
+```
+
+The plugin automatically:
+1. Generates embeddings for "headphones for studying"
+2. Performs vector similarity search
+3. Returns the most semantically similar results
+
+### Hybrid Search
+
+```javascript
+const results = await search(db, {
+  term: 'fast charging laptop',
+  mode: 'hybrid',
+  limit: 10
+})
+```
+
+### Custom Vector Properties
+
+```javascript
+const db = await create({
+  schema: {
+    title: 'string',
+    body: 'string',
+    titleEmbeddings: 'vector[384]',
+    bodyEmbeddings: 'vector[384]'
+  },
+  plugins: [
+    pluginSecureProxy({
+      apiKey: 'your-api-key',
+      embeddings: {
+        defaultProperty: 'titleEmbeddings',
+        model: 'orama/gte-small',
+        onInsert: {
+          generate: true,
+          properties: ['title']
+        }
+      }
+    })
+  ]
+})
+
+// Manually set bodyEmbeddings separately if needed
+```
+
+## How It Works
+
+The Secure Proxy plugin implements hooks to intercept insert and search operations:
+
+### beforeInsert Hook
+
+At `/home/daytona/workspace/source/packages/plugin-secure-proxy/src/index.ts:57-76`:
+
+```typescript
+async beforeInsert<T extends TypedDocument<any>>(_db: AnyOrama, _id: string, params: PartialSchemaDeep<T>) {
+  if (!pluginParams.embeddings?.onInsert?.generate) {
+    return
+  }
+
+  const properties = pluginParams.embeddings.onInsert.properties
+  const values = getPropertiesValues(params, properties)
+
+  if (pluginParams.embeddings.onInsert.verbose) {
+    console.log(`Generating embeddings for properties ${properties.join(', ')}: ${values}`)
+  }
+
+  const embeddings = await proxy.generateEmbeddings(values, pluginParams.embeddings.model)
+  params[pluginParams.embeddings.defaultProperty] = embeddings
+}
+```
+
+### beforeSearch Hook
+
+At `/home/daytona/workspace/source/packages/plugin-secure-proxy/src/index.ts:78-104`:
+
+```typescript
+async beforeSearch<T extends AnyOrama>(_db: AnyOrama, params: SearchParams<T, TypedDocument<any>>) {
+  if (params.mode !== 'vector' && params.mode !== 'hybrid') {
+    return
+  }
+
+  if (params?.vector?.value) {
+    return
+  }
+
+  if (!params.term) {
+    throw new Error('Neither "term" nor "vector" parameters were provided')
+  }
+
+  const embeddings = await proxy.generateEmbeddings(params.term, pluginParams.embeddings.model)
+  
+  if (!params.vector) {
+    params.vector = {
+      property: params?.vector?.property ?? pluginParams.embeddings.defaultProperty,
+      value: embeddings
+    }
+  }
+
+  params.vector.value = embeddings
+}
+```
+
+## Accessing the Proxy
+
+The plugin exposes the OramaProxy instance for direct use:
+
+```javascript
+const db = await create({
+  schema: { /* ... */ },
+  plugins: [
+    pluginSecureProxy({
+      apiKey: 'your-api-key',
+      embeddings: { /* ... */ },
+      chat: {
+        model: 'openai/gpt-4o'
+      }
+    })
+  ]
+})
+
+// Access the proxy through the plugin
+const plugin = db.plugins[0]
+const proxy = plugin.extra.proxy
+
+// Generate embeddings directly
+const embeddings = await proxy.generateEmbeddings(
+  'some text',
+  'orama/gte-small'
+)
+
+// Use chat features
+const chatResponse = await proxy.chat({
+  model: 'openai/gpt-4o',
+  messages: [
+    { role: 'user', content: 'What is Orama?' }
+  ]
+})
+```
+
+## Security Benefits
+
+<CardGroup cols={2}>
+  <Card title="No Exposed Keys" icon="key">
+    API keys are stored securely in Orama Cloud and never exposed to clients
+  </Card>
+  
+  <Card title="Client-Side Safe" icon="shield">
+    Use in browsers and mobile apps without security concerns
+  </Card>
+  
+  <Card title="Rate Limiting" icon="gauge">
+    Built-in rate limiting and abuse prevention
+  </Card>
+  
+  <Card title="Usage Tracking" icon="chart-line">
+    Monitor API usage through Orama Cloud dashboard
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+### Choose the Right Model
+
+```javascript
+// For most applications, start with orama/gte-small
+embeddings: {
+  model: 'orama/gte-small', // 384 dimensions, fast, cost-effective
+  defaultProperty: 'embeddings'
+}
+
+// For higher quality, use orama/gte-large
+embeddings: {
+  model: 'orama/gte-large', // 1024 dimensions, best quality
+  defaultProperty: 'embeddings'
+}
+```
+
+### Combine Multiple Properties
+
+```javascript
+// Generate richer embeddings from multiple fields
+onInsert: {
+  generate: true,
+  properties: ['title', 'description', 'tags', 'category']
+}
+```
+
+### Use Verbose Mode During Development
+
+```javascript
+onInsert: {
+  generate: true,
+  properties: ['title', 'description'],
+  verbose: true // Enable to debug embedding generation
+}
+```
+
+## Comparison with Local Embeddings
+
+| Feature | Secure Proxy | Embeddings Plugin |
+|---------|--------------|-------------------|
+| **Setup** | API key only | TensorFlow.js required |
+| **Models** | Multiple options | Universal Sentence Encoder only |
+| **Dimensions** | 384-3072 | 512 |
+| **Client-Side** | ✅ Safe | ❌ Model too large |
+| **Offline** | ❌ Requires internet | ✅ Works offline |
+| **Cost** | API usage | Free (compute costs) |
+| **Performance** | Consistent | Varies by hardware |
+
+## Troubleshooting
+
+### Invalid API Key
+
+```
+Error: Invalid API key for plugin-secure-proxy
+```
+
+Ensure your API key is correct and active in [Orama Cloud](https://cloud.orama.com).
+
+### Model Not Found
+
+```
+Error: Model not found
+```
+
+Check that you're using a valid model name from the [Available Models](#available-embedding-models) list.
+
+### Vector Dimension Mismatch
+
+```
+Error: Vector dimension mismatch
+```
+
+Ensure your schema's vector dimension matches your chosen model:
+
+```javascript
+// For orama/gte-small (384 dimensions)
+schema: {
+  embeddings: 'vector[384]' // Must match model output
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Vector Search" icon="magnifying-glass" href="/open-source/usage/search/vector-search">
+    Learn more about vector search in Orama
+  </Card>
+  
+  <Card title="Orama Cloud" icon="cloud" href="https://cloud.orama.com">
+    Sign up for Orama Cloud
+  </Card>
+  
+  <Card title="Analytics Plugin" icon="chart-line" href="/plugins/analytics">
+    Track search analytics with Orama Cloud
+  </Card>
+  
+  <Card title="Local Embeddings" icon="brain" href="/plugins/embeddings">
+    Compare with offline embeddings plugin
+  </Card>
+</CardGroup>

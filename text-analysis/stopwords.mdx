@@ -1,0 +1,453 @@
+---
+title: Stopwords
+description: Filter out common words to improve search quality and reduce index size
+---
+
+Stopwords are common words that appear frequently in text but usually don't carry significant meaning for search. Words like "the", "is", "at", "which", and "on" are typically considered stopwords.
+
+Removing stopwords:
+- Reduces index size by 20-40%
+- Improves search relevance
+- Speeds up query processing
+- Reduces false positive matches
+
+## How Stopwords Work
+
+During tokenization, Orama checks each token against the stopwords list and removes matches:
+
+```typescript
+// Input text:
+// "The quick brown fox jumps over the lazy dog"
+
+// Without stopwords:
+// ["the", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog"]
+
+// With English stopwords:
+// ["quick", "brown", "fox", "jumps", "lazy", "dog"]
+// "the" and "over" removed
+```
+
+<Note>
+By default, Orama initializes with an **empty stopwords array**. You must explicitly provide stopwords to enable filtering.
+</Note>
+
+## Using Built-in Stopwords
+
+Orama provides stopword lists for 30 languages through `@orama/stopwords`:
+
+<CodeGroup>
+```typescript English
+import { create } from '@orama/orama'
+import { stopwords } from '@orama/stopwords/english'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    content: 'string'
+  },
+  components: {
+    tokenizer: {
+      stopWords: stopwords
+    }
+  }
+})
+
+await insert(db, {
+  title: 'The Art of Programming',
+  content: 'Learn the best practices for coding'
+})
+
+// "The", "of", "the", "for" are filtered out
+// Indexed tokens: ["art", "programming", "learn", "best", "practices", "coding"]
+```
+
+```typescript Italian
+import { create } from '@orama/orama'
+import { stopwords as italianStopwords } from '@orama/stopwords/italian'
+
+const db = await create({
+  schema: {
+    description: 'string'
+  },
+  components: {
+    tokenizer: {
+      stopWords: italianStopwords
+    }
+  }
+})
+```
+
+```typescript French
+import { create } from '@orama/orama'
+import { stopwords as frenchStopwords } from '@orama/stopwords/french'
+
+const db = await create({
+  schema: {
+    text: 'string'
+  },
+  components: {
+    tokenizer: {
+      stopWords: frenchStopwords
+    }
+  }
+})
+```
+
+```typescript German
+import { create } from '@orama/orama'
+import { stopwords as germanStopwords } from '@orama/stopwords/german'
+
+const db = await create({
+  schema: {
+    content: 'string'
+  },
+  components: {
+    tokenizer: {
+      stopWords: germanStopwords
+    }
+  }
+})
+```
+</CodeGroup>
+
+## Supported Languages
+
+Orama provides stopword lists for 30 languages:
+
+<CardGroup cols={3}>
+  <Card title="Arabic" icon="language">@orama/stopwords/arabic</Card>
+  <Card title="Armenian" icon="language">@orama/stopwords/armenian</Card>
+  <Card title="Bulgarian" icon="language">@orama/stopwords/bulgarian</Card>
+  <Card title="Chinese" icon="language">@orama/stopwords/chinese</Card>
+  <Card title="Danish" icon="language">@orama/stopwords/danish</Card>
+  <Card title="Dutch" icon="language">@orama/stopwords/dutch</Card>
+  <Card title="English" icon="language">@orama/stopwords/english</Card>
+  <Card title="Finnish" icon="language">@orama/stopwords/finnish</Card>
+  <Card title="French" icon="language">@orama/stopwords/french</Card>
+  <Card title="German" icon="language">@orama/stopwords/german</Card>
+  <Card title="Greek" icon="language">@orama/stopwords/greek</Card>
+  <Card title="Hungarian" icon="language">@orama/stopwords/hungarian</Card>
+  <Card title="Indian" icon="language">@orama/stopwords/indian</Card>
+  <Card title="Indonesian" icon="language">@orama/stopwords/indonesian</Card>
+  <Card title="Irish" icon="language">@orama/stopwords/irish</Card>
+  <Card title="Italian" icon="language">@orama/stopwords/italian</Card>
+  <Card title="Japanese" icon="language">@orama/stopwords/japanese</Card>
+  <Card title="Nepali" icon="language">@orama/stopwords/nepali</Card>
+  <Card title="Norwegian" icon="language">@orama/stopwords/norwegian</Card>
+  <Card title="Portuguese" icon="language">@orama/stopwords/portuguese</Card>
+  <Card title="Romanian" icon="language">@orama/stopwords/romanian</Card>
+  <Card title="Russian" icon="language">@orama/stopwords/russian</Card>
+  <Card title="Sanskrit" icon="language">@orama/stopwords/sanskrit</Card>
+  <Card title="Serbian" icon="language">@orama/stopwords/serbian</Card>
+  <Card title="Slovenian" icon="language">@orama/stopwords/slovenian</Card>
+  <Card title="Spanish" icon="language">@orama/stopwords/spanish</Card>
+  <Card title="Swedish" icon="language">@orama/stopwords/swedish</Card>
+  <Card title="Tamil" icon="language">@orama/stopwords/tamil</Card>
+  <Card title="Turkish" icon="language">@orama/stopwords/turkish</Card>
+  <Card title="Ukrainian" icon="language">@orama/stopwords/ukrainian</Card>
+</CardGroup>
+
+## Custom Stopwords
+
+Provide your own stopwords as an array:
+
+```typescript
+import { create } from '@orama/orama'
+
+const customStopwords = ['inc', 'ltd', 'corp', 'co', 'llc']
+
+const db = await create({
+  schema: {
+    companyName: 'string'
+  },
+  components: {
+    tokenizer: {
+      stopWords: customStopwords
+    }
+  }
+})
+
+await insert(db, {
+  companyName: 'Acme Corp'
+})
+
+// "Corp" is filtered out
+// Indexed: ["acme"]
+```
+
+## Extending Built-in Stopwords
+
+Combine built-in stopwords with custom additions:
+
+```typescript
+import { create } from '@orama/orama'
+import { stopwords as englishStopwords } from '@orama/stopwords/english'
+
+const db = await create({
+  schema: {
+    content: 'string'
+  },
+  components: {
+    tokenizer: {
+      stopWords: (defaultStopWords) => [
+        ...englishStopwords,
+        ...defaultStopWords,
+        // Add custom domain-specific stopwords
+        'lorem',
+        'ipsum',
+        'dolor',
+        'click',
+        'here'
+      ]
+    }
+  }
+})
+```
+
+<Note>
+The function receives an empty array by default since Orama doesn't have default stopwords. This pattern allows you to chain stopword modifications.
+</Note>
+
+## Disabling Stopwords
+
+Explicitly disable stopword filtering:
+
+```typescript
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    content: 'string'
+  },
+  components: {
+    tokenizer: {
+      stopWords: false  // Disable stopwords completely
+    }
+  }
+})
+
+// All words are indexed, including "the", "is", "at", etc.
+```
+
+## English Stopwords List
+
+The English stopwords package includes 204 common words:
+
+```typescript
+// Pronouns
+['i', 'me', 'my', 'myself', 'we', 'us', 'our', 'ours', 'ourselves',
+ 'you', 'your', 'yours', 'yourself', 'yourselves',
+ 'he', 'him', 'his', 'himself',
+ 'she', 'her', 'hers', 'herself',
+ 'it', 'its', 'itself',
+ 'they', 'them', 'their', 'theirs', 'themselves']
+
+// Question words
+['what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those']
+
+// Verbs (to be, to have, to do)
+['am', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+ 'have', 'has', 'had', 'having',
+ 'do', 'does', 'did', 'doing']
+
+// Modal verbs
+['will', 'would', 'shall', 'should', 'can', 'could',
+ 'may', 'might', 'must', 'ought']
+
+// Contractions
+["i'm", "you're", "he's", "she's", "it's", "we're", "they're",
+ "i've", "you've", "we've", "they've",
+ "i'd", "you'd", "he'd", "she'd", "we'd", "they'd",
+ "i'll", "you'll", "he'll", "she'll", "we'll", "they'll",
+ "isn't", "aren't", "wasn't", "weren't",
+ "hasn't", "haven't", "hadn't",
+ "doesn't", "don't", "didn't",
+ "won't", "wouldn't", "shan't", "shouldn't",
+ "can't", "cannot", "couldn't", "mustn't"]
+
+// Articles & conjunctions
+['an', 'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while']
+
+// Prepositions
+['of', 'at', 'by', 'for', 'with', 'about', 'against', 'between',
+ 'into', 'through', 'during', 'before', 'after', 'above', 'below',
+ 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under']
+
+// Adverbs
+['again', 'further', 'then', 'once',
+ 'here', 'there', 'when', 'where', 'why', 'how']
+
+// Quantifiers
+['all', 'any', 'both', 'each', 'few', 'more', 'most',
+ 'other', 'some', 'such']
+
+// Negation & emphasis
+['no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very']
+```
+
+## When to Use Stopwords
+
+<AccordionGroup>
+  <Accordion title="Good Use Cases" icon="check">
+    - **Long-form content**: Articles, blog posts, documentation
+    - **General search**: When searching natural language text
+    - **Large datasets**: To reduce index size significantly
+    - **E-commerce**: Product descriptions with common filler words
+  </Accordion>
+  
+  <Accordion title="Avoid Stopwords For" icon="xmark">
+    - **Short content**: Tweets, headlines, titles (stopwords may be significant)
+    - **Technical content**: Code, commands, where "to", "in", "at" may be important
+    - **Phrase search**: When exact phrases like "to be or not to be" matter
+    - **Small datasets**: Limited benefits if you have fewer than 1000 documents
+  </Accordion>
+</AccordionGroup>
+
+## Performance Impact
+
+### Index Size Reduction
+Stopwords typically reduce index size by **20-40%** depending on content type:
+
+```typescript
+// Without stopwords: 1,000,000 tokens indexed
+// With English stopwords: ~600,000 tokens indexed
+// Reduction: 40%
+```
+
+### Search Performance
+Fewer tokens mean:
+- **Faster searches** (10-30% improvement)
+- **Lower memory usage**
+- **Reduced disk I/O** for persistent indexes
+
+### Insert Performance
+Minimal overhead (~2-5%) for checking tokens against the stopwords list.
+
+## Stopwords with Stemming
+
+Stopwords are removed **before** stemming in the normalization pipeline:
+
+```typescript
+import { create } from '@orama/orama'
+import { stopwords } from '@orama/stopwords/english'
+
+const db = await create({
+  schema: {
+    content: 'string'
+  },
+  components: {
+    tokenizer: {
+      language: 'english',
+      stemming: true,
+      stopWords: stopwords
+    }
+  }
+})
+
+// Input: "The developers are developing applications"
+// 1. Tokenize: ["the", "developers", "are", "developing", "applications"]
+// 2. Remove stopwords: ["developers", "developing", "applications"]
+// 3. Stem: ["develop", "develop", "applic"]
+// 4. Result: ["develop", "applic"] (duplicates removed)
+```
+
+## Validation
+
+Orama validates stopwords configuration:
+
+```typescript
+// ✅ Valid: Array of strings
+stopWords: ['the', 'is', 'at']
+
+// ✅ Valid: Function returning array of strings
+stopWords: (defaults) => [...defaults, 'custom']
+
+// ✅ Valid: Disable stopwords
+stopWords: false
+
+// ❌ Invalid: Number
+stopWords: 123  // Error: CUSTOM_STOP_WORDS_MUST_BE_FUNCTION_OR_ARRAY
+
+// ❌ Invalid: Array with non-strings
+stopWords: ['the', 123, 'is']  // Error: CUSTOM_STOP_WORDS_MUST_BE_FUNCTION_OR_ARRAY
+
+// ❌ Invalid: Function not returning array
+stopWords: () => 'the'  // Error: CUSTOM_STOP_WORDS_MUST_BE_FUNCTION_OR_ARRAY
+```
+
+## Domain-Specific Example
+
+For an e-commerce site, you might want to filter brand-specific filler words:
+
+```typescript
+import { create } from '@orama/orama'
+import { stopwords as englishStopwords } from '@orama/stopwords/english'
+
+const ecommerceStopwords = [
+  ...englishStopwords,
+  // Product description filler
+  'new',
+  'now',
+  'available',
+  'shop',
+  'buy',
+  'get',
+  'free',
+  'shipping',
+  // Brand-specific
+  'official',
+  'authentic',
+  'genuine'
+]
+
+const db = await create({
+  schema: {
+    productName: 'string',
+    description: 'string'
+  },
+  components: {
+    tokenizer: {
+      stopWords: ecommerceStopwords,
+      // Don't filter stopwords from product names
+      stemmerSkipProperties: ['productName']
+    }
+  }
+})
+```
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @orama/stopwords
+```
+
+```bash pnpm
+pnpm add @orama/stopwords
+```
+
+```bash yarn
+yarn add @orama/stopwords
+```
+
+```bash bun
+bun add @orama/stopwords
+```
+</CodeGroup>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Stemming" icon="scissors" href="/text-analysis/stemming">
+    Combine stopwords with stemming for optimal search
+  </Card>
+  <Card title="Tokenization" icon="text" href="/text-analysis/tokenization">
+    Learn how tokenization and stopwords work together
+  </Card>
+  <Card title="Languages" icon="language" href="/text-analysis/languages">
+    See stopwords support for all 30+ languages
+  </Card>
+  <Card title="Search" icon="magnifying-glass" href="/open-source/usage/search">
+    How stopwords affect search results
+  </Card>
+</CardGroup>

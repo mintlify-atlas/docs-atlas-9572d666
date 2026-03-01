@@ -1,80 +1,242 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with Orama in under 5 minutes. Learn how to create a database, insert documents, and perform your first search.
 ---
 
-## Get started in three steps
+This guide will walk you through creating your first Orama search engine. You'll learn how to create a database, insert documents, and perform searches.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, make sure you have [installed Orama](/installation) in your project.
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Create your first search engine
 
-### Step 2: Deploy your changes
+<Steps>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Step title="Import Orama methods">
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+Start by importing the methods you'll need from the `@orama/orama` package:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+```typescript
+import { create, insert, search } from '@orama/orama'
+```
 
-### Step 3: Go live
+</Step>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<Step title="Define your schema">
+
+Create a new database instance with a schema that defines the structure of your documents:
+
+```typescript
+const db = create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    year: 'number',
+    rating: 'number',
+    genre: 'string[]'
+  }
+})
+```
+
+The schema tells Orama what fields your documents will have and what data types to expect. This enables type-safe operations and optimizes search performance.
+
+</Step>
+
+<Step title="Insert documents">
+
+Add documents to your database using the `insert` method:
+
+```typescript
+await insert(db, {
+  title: 'The Prestige',
+  description: 'Two magicians engage in a battle to create the ultimate illusion',
+  year: 2006,
+  rating: 8.5,
+  genre: ['drama', 'mystery', 'thriller']
+})
+
+await insert(db, {
+  title: 'Inception',
+  description: 'A thief who steals corporate secrets through dream-sharing technology',
+  year: 2010,
+  rating: 8.8,
+  genre: ['action', 'sci-fi', 'thriller']
+})
+
+await insert(db, {
+  title: 'Interstellar',
+  description: 'A team of explorers travel through a wormhole in space',
+  year: 2014,
+  rating: 8.6,
+  genre: ['adventure', 'drama', 'sci-fi']
+})
+```
+
+<Info>
+  You can also use `insertMultiple` to insert multiple documents at once for better performance.
+</Info>
+
+</Step>
+
+<Step title="Search your data">
+
+Now you can search your documents using the `search` method:
+
+```typescript
+const results = await search(db, {
+  term: 'space explorers'
+})
+
+console.log(results)
+```
+
+This will return results matching your search term, ranked by relevance:
+
+```json
+{
+  "elapsed": {
+    "raw": 21492,
+    "formatted": "21μs"
+  },
+  "hits": [
+    {
+      "id": "3-1234",
+      "score": 0.925,
+      "document": {
+        "title": "Interstellar",
+        "description": "A team of explorers travel through a wormhole in space",
+        "year": 2014,
+        "rating": 8.6,
+        "genre": ["adventure", "drama", "sci-fi"]
+      }
+    }
+  ],
+  "count": 1
+}
+```
+
+</Step>
+
+</Steps>
+
+## Complete example
+
+Here's the complete code from this quickstart:
+
+```typescript
+import { create, insert, search } from '@orama/orama'
+
+// Create database with schema
+const db = create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    year: 'number',
+    rating: 'number',
+    genre: 'string[]'
+  }
+})
+
+// Insert documents
+await insert(db, {
+  title: 'The Prestige',
+  description: 'Two magicians engage in a battle to create the ultimate illusion',
+  year: 2006,
+  rating: 8.5,
+  genre: ['drama', 'mystery', 'thriller']
+})
+
+await insert(db, {
+  title: 'Inception',
+  description: 'A thief who steals corporate secrets through dream-sharing technology',
+  year: 2010,
+  rating: 8.8,
+  genre: ['action', 'sci-fi', 'thriller']
+})
+
+await insert(db, {
+  title: 'Interstellar',
+  description: 'A team of explorers travel through a wormhole in space',
+  year: 2014,
+  rating: 8.6,
+  genre: ['adventure', 'drama', 'sci-fi']
+})
+
+// Search
+const results = await search(db, {
+  term: 'space explorers'
+})
+
+console.log(results.hits)
+```
+
+## Understanding search results
+
+Orama returns search results with the following structure:
+
+- **elapsed** - Time taken to perform the search (in microseconds)
+- **hits** - Array of matching documents with their scores
+- **count** - Total number of results found
+
+Each hit contains:
+
+- **id** - Unique document identifier
+- **score** - Relevance score (higher is more relevant)
+- **document** - The full document matching your query
+
+## Advanced search options
+
+Orama supports many advanced search features. Here are a few examples:
+
+### Search with filters
+
+```typescript
+const results = await search(db, {
+  term: 'thriller',
+  where: {
+    rating: {
+      gte: 8.5
+    }
+  }
+})
+```
+
+### Limit and offset for pagination
+
+```typescript
+const results = await search(db, {
+  term: 'thriller',
+  limit: 10,
+  offset: 0
+})
+```
+
+### Boost specific fields
+
+```typescript
+const results = await search(db, {
+  term: 'thriller',
+  boost: {
+    title: 2,  // Title matches are twice as important
+    description: 1
+  }
+})
+```
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Full-text search" icon="magnifying-glass" href="/search/full-text">
+    Learn about advanced full-text search features
+  </Card>
+  <Card title="Vector search" icon="brain" href="/search/vector">
+    Implement semantic search with embeddings
+  </Card>
+  <Card title="Filters and facets" icon="filter" href="/search/filters">
+    Filter and facet your search results
+  </Card>
+  <Card title="Plugins" icon="puzzle-piece" href="/plugins">
+    Extend Orama with official and custom plugins
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

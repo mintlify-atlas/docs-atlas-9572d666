@@ -1,0 +1,306 @@
+---
+title: upsert()
+description: Insert or update a document in an Orama database instance
+---
+
+Inserts a new document or updates an existing one in the Orama database. If a document with the same ID exists, it will be updated; otherwise, a new document will be inserted.
+
+## Function Signature
+
+```typescript
+function upsert<T extends AnyOrama>(
+  orama: T,
+  doc: PartialSchemaDeep<TypedDocument<T>>,
+  language?: string,
+  skipHooks?: boolean,
+  options?: InsertOptions
+): Promise<string> | string
+```
+
+## Parameters
+
+<ParamField path="orama" type="Orama" required>
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="doc" type="PartialSchemaDeep<TypedDocument<T>>" required>
+  The document to insert or update. Must match the database schema structure.
+</ParamField>
+
+<ParamField path="language" type="string">
+  Optional language for tokenization.
+</ParamField>
+
+<ParamField path="skipHooks" type="boolean" default="false">
+  If true, skips executing beforeUpsert, afterUpsert, and underlying insert/update hooks.
+</ParamField>
+
+<ParamField path="options" type="InsertOptions">
+  Additional options for insertion (used only when inserting a new document).
+  
+  <Expandable title="InsertOptions properties">
+    <ParamField path="avlRebalanceThreshold" type="number">
+      Threshold for AVL tree rebalancing operations.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Returns
+
+<ResponseField name="id" type="string | Promise<string>">
+  The ID of the inserted or updated document. Returns a Promise if async operations are required.
+</ResponseField>
+
+## Behavior
+
+- Extracts the document ID from the provided document
+- Triggers `beforeUpsert` hook (if not skipped)
+- Checks if a document with the ID already exists
+- If exists: calls `update()` to update the document
+- If not exists: calls `insert()` to create a new document
+- Triggers `afterUpsert` hook with the result ID (if not skipped)
+- Automatically determines whether to run synchronously or asynchronously
+
+## Implementation Details
+
+```typescript
+// Simplified implementation
+async function upsert(orama, doc, language, skipHooks, options) {
+  const id = orama.getDocumentIndexId(doc)
+  
+  if (!skipHooks && orama.beforeUpsert) {
+    await runSingleHook(orama.beforeUpsert, orama, id, doc)
+  }
+  
+  const existingDoc = orama.documentsStore.get(orama.data.docs, id)
+  let resultId
+  
+  if (existingDoc) {
+    resultId = await update(orama, id, doc, language, skipHooks)
+  } else {
+    resultId = await insert(orama, doc, language, skipHooks, options)
+  }
+  
+  if (!skipHooks && orama.afterUpsert) {
+    await runSingleHook(orama.afterUpsert, orama, resultId, doc)
+  }
+  
+  return resultId
+}
+```
+
+## Examples
+
+### Basic Upsert
+
+```typescript
+import { create, upsert, getByID } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    price: 'number'
+  }
+})
+
+// First call: inserts new document
+const id1 = await upsert(db, {
+  id: 'product-1',
+  title: 'Wireless Headphones',
+  price: 199.99
+})
+
+console.log('First upsert:', id1) // 'product-1'
+
+// Second call: updates existing document
+const id2 = await upsert(db, {
+  id: 'product-1',
+  title: 'Wireless Headphones - Premium',
+  price: 249.99
+})
+
+console.log('Second upsert:', id2) // 'product-1'
+```
+
+### Sync Product Catalog
+
+```typescript
+const syncProducts = async (products: any[]) => {
+  const results = []
+  
+  for (const product of products) {
+    const id = await upsert(db, {
+      id: product.sku,
+      title: product.name,
+      price: product.price,
+      inStock: product.inventory > 0
+    })
+    results.push(id)
+  }
+  
+  return results
+}
+
+const externalProducts = [
+  { sku: 'SKU-001', name: 'Laptop', price: 999, inventory: 5 },
+  { sku: 'SKU-002', name: 'Mouse', price: 29, inventory: 50 }
+]
+
+await syncProducts(externalProducts)
+```
+
+### Cache with Automatic Update
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    url: 'string',
+    content: 'string',
+    cachedAt: 'string'
+  }
+})
+
+const cacheWebPage = async (url: string, content: string) => {
+  return await upsert(db, {
+    id: url,
+    url,
+    content,
+    cachedAt: new Date().toISOString()
+  })
+}
+
+// First call caches the page
+await cacheWebPage('https://example.com', '<html>...</html>')
+
+// Second call updates the cache
+await cacheWebPage('https://example.com', '<html>...updated...</html>')
+```
+
+### User Profile Management
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    username: 'string',
+    email: 'string',
+    lastLogin: 'string',
+    loginCount: 'number'
+  }
+})
+
+const updateUserLogin = async (userId: string, username: string, email: string) => {
+  const existing = await getByID(db, userId)
+  
+  return await upsert(db, {
+    id: userId,
+    username,
+    email,
+    lastLogin: new Date().toISOString(),
+    loginCount: existing ? existing.loginCount + 1 : 1
+  })
+}
+
+await updateUserLogin('user-123', 'john_doe', 'john@example.com')
+```
+
+### Settings Management
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    key: 'string',
+    value: 'string',
+    updatedAt: 'string'
+  }
+})
+
+const setSetting = async (key: string, value: string) => {
+  return await upsert(db, {
+    id: key,
+    key,
+    value,
+    updatedAt: new Date().toISOString()
+  })
+}
+
+await setSetting('theme', 'dark')
+await setSetting('language', 'en')
+await setSetting('theme', 'light') // Updates existing setting
+```
+
+### Document Versioning
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    content: 'string',
+    version: 'number',
+    updatedAt: 'string'
+  }
+})
+
+const saveDocument = async (docId: string, title: string, content: string) => {
+  const existing = await getByID(db, docId)
+  
+  return await upsert(db, {
+    id: docId,
+    title,
+    content,
+    version: existing ? existing.version + 1 : 1,
+    updatedAt: new Date().toISOString()
+  })
+}
+
+await saveDocument('doc-1', 'My Document', 'Initial content')
+await saveDocument('doc-1', 'My Document', 'Updated content')
+```
+
+### Batch Upsert Pattern
+
+```typescript
+const upsertAll = async (documents: any[]) => {
+  const results = []
+  
+  for (const doc of documents) {
+    const id = await upsert(db, doc)
+    results.push(id)
+  }
+  
+  return results
+}
+
+const mixed = [
+  { id: '1', title: 'New Item' },      // Will be inserted
+  { id: 'product-1', title: 'Updated' } // Will be updated
+]
+
+await upsertAll(mixed)
+```
+
+## Use Cases
+
+- **Data Synchronization**: Keep local database in sync with external data sources
+- **Caching**: Store and update cached content
+- **User Sessions**: Track user activity with automatic session creation/update
+- **Settings Storage**: Manage application settings that may or may not exist
+- **API Responses**: Cache API responses with automatic refresh
+- **Document Management**: Save documents without checking if they exist first
+
+## Performance Considerations
+
+- Upsert checks for document existence before deciding to insert or update
+- For bulk operations with known insert/update split, consider using `insertMultiple()` and `updateMultiple()` separately
+- For large batches of mixed inserts and updates, use [`upsertMultiple()`](/api/upsert-multiple)
+
+## See Also
+
+- [insert()](/api/insert) - Insert a new document
+- [update()](/api/update) - Update an existing document
+- [upsertMultiple()](/api/upsert-multiple) - Upsert multiple documents
+- [getByID()](/api/get-by-id) - Retrieve a document by ID

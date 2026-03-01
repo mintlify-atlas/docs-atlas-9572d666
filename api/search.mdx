@@ -1,0 +1,298 @@
+---
+title: search()
+description: Perform full-text, vector, or hybrid search on an Orama database
+---
+
+Perform a search query on an Orama database. Supports three search modes: full-text search, vector search, and hybrid search.
+
+## Signature
+
+```typescript
+function search<T extends AnyOrama, ResultDocument = TypedDocument<T>>(
+  orama: T,
+  params: SearchParams<T, ResultDocument>,
+  language?: string
+): Results<ResultDocument> | Promise<Results<ResultDocument>>
+```
+
+## Parameters
+
+<ParamField path="orama" type="AnyOrama" required>
+  The Orama database instance to search.
+</ParamField>
+
+<ParamField path="params" type="SearchParams" required>
+  Search parameters object. The structure depends on the search mode:
+  
+  <Expandable title="Full-text Search (default)">
+    <ParamField path="term" type="string">
+      The search term, sentence, or word to search for.
+    </ParamField>
+    
+    <ParamField path="mode" type="'fulltext'">
+      Search mode. Defaults to `'fulltext'` if not specified.
+    </ParamField>
+    
+    <ParamField path="properties" type="string[] | '*'">
+      The document properties to search in. Use `'*'` to search all properties.
+    </ParamField>
+    
+    <ParamField path="limit" type="number" default={10}>
+      Maximum number of results to return.
+    </ParamField>
+    
+    <ParamField path="offset" type="number" default={0}>
+      Number of results to skip (for pagination).
+    </ParamField>
+    
+    <ParamField path="exact" type="boolean" default={false}>
+      Whether to match the term exactly.
+    </ParamField>
+    
+    <ParamField path="tolerance" type="number">
+      Maximum Levenshtein distance for fuzzy matching.
+    </ParamField>
+    
+    <ParamField path="relevance" type="BM25Params">
+      BM25 ranking parameters:
+      - `k`: Term frequency saturation (default: 1.2)
+      - `b`: Document length impact (default: 0.75)
+      - `d`: Frequency normalization lower bound (default: 0.5)
+    </ParamField>
+    
+    <ParamField path="boost" type="Record<string, number>">
+      Boost multipliers for specific properties.
+    </ParamField>
+    
+    <ParamField path="where" type="WhereCondition">
+      Filter conditions to apply to results.
+    </ParamField>
+    
+    <ParamField path="facets" type="FacetsParams">
+      Facet configuration for result aggregation.
+    </ParamField>
+    
+    <ParamField path="groupBy" type="GroupByParams">
+      Group results by specific properties.
+    </ParamField>
+    
+    <ParamField path="distinctOn" type="string">
+      Property to use for deduplication.
+    </ParamField>
+    
+    <ParamField path="threshold" type="number" default={0}>
+      Minimum score threshold (0-1).
+    </ParamField>
+    
+    <ParamField path="sortBy" type="SorterParams">
+      Sort configuration:
+      - `property`: Property to sort by
+      - `order`: `'ASC'` or `'DESC'`
+    </ParamField>
+    
+    <ParamField path="preflight" type="boolean" default={false}>
+      Return only count and facets without full results.
+    </ParamField>
+    
+    <ParamField path="includeVectors" type="boolean" default={false}>
+      Whether to include vector values in results.
+    </ParamField>
+  </Expandable>
+  
+  <Expandable title="Vector Search">
+    <ParamField path="mode" type="'vector'" required>
+      Set to `'vector'` for vector similarity search.
+    </ParamField>
+    
+    <ParamField path="vector" type="object" required>
+      Vector search configuration:
+      - `value`: Array of numbers representing the query vector
+      - `property`: Name of the vector property to search
+    </ParamField>
+    
+    <ParamField path="similarity" type="number" default={0.8}>
+      Minimum similarity score (0-1).
+    </ParamField>
+    
+    <ParamField path="limit" type="number" default={10}>
+      Maximum number of results to return.
+    </ParamField>
+    
+    <ParamField path="offset" type="number" default={0}>
+      Number of results to skip.
+    </ParamField>
+    
+    <ParamField path="where" type="WhereCondition">
+      Filter conditions to apply.
+    </ParamField>
+    
+    <ParamField path="includeVectors" type="boolean" default={false}>
+      Whether to include vector values in results.
+    </ParamField>
+  </Expandable>
+  
+  <Expandable title="Hybrid Search">
+    <ParamField path="mode" type="'hybrid'" required>
+      Set to `'hybrid'` for combined full-text and vector search.
+    </ParamField>
+    
+    <ParamField path="term" type="string" required>
+      Search term for full-text search component.
+    </ParamField>
+    
+    <ParamField path="vector" type="object">
+      Vector search configuration (same as vector mode).
+    </ParamField>
+    
+    <ParamField path="hybridWeights" type="object" default="{ text: 0.5, vector: 0.5 }">
+      Weight distribution:
+      - `text`: Weight for full-text results (0-1)
+      - `vector`: Weight for vector results (0-1)
+    </ParamField>
+    
+    <ParamField path="properties" type="string[] | '*'">
+      Properties to search (for full-text component).
+    </ParamField>
+    
+    <ParamField path="limit" type="number" default={10}>
+      Maximum results per search mode.
+    </ParamField>
+    
+    Additional parameters from both full-text and vector modes are supported.
+  </Expandable>
+</ParamField>
+
+<ParamField path="language" type="string">
+  Language for tokenization and stemming (e.g., `'english'`, `'spanish'`).
+</ParamField>
+
+## Returns
+
+<ResponseField name="count" type="number">
+  Total number of matching documents.
+</ResponseField>
+
+<ResponseField name="hits" type="Result[]">
+  Array of search results, each containing:
+  - `id`: Document ID
+  - `score`: Relevance score
+  - `document`: The matched document
+</ResponseField>
+
+<ResponseField name="elapsed" type="object">
+  Search execution time:
+  - `raw`: Time in nanoseconds
+  - `formatted`: Human-readable formatted time
+</ResponseField>
+
+<ResponseField name="facets" type="FacetResult">
+  Facet aggregations (if requested).
+</ResponseField>
+
+<ResponseField name="groups" type="GroupResult[]">
+  Grouped results (if requested).
+</ResponseField>
+
+## Examples
+
+### Full-text Search
+
+```typescript
+import { create, insert, search } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    price: 'number'
+  }
+})
+
+await insert(db, { title: 'Wireless Headphones', description: 'High quality', price: 99 })
+await insert(db, { title: 'Bluetooth Speaker', description: 'Portable sound', price: 49 })
+
+const results = await search(db, {
+  term: 'headphones',
+  properties: ['title', 'description'],
+  limit: 10
+})
+
+console.log(results.hits) // [{ id: '...', score: 1.5, document: {...} }]
+```
+
+### Vector Search
+
+```typescript
+const db = await create({
+  schema: {
+    title: 'string',
+    embedding: 'vector[384]'
+  }
+})
+
+const results = await search(db, {
+  mode: 'vector',
+  vector: {
+    value: [0.1, 0.2, 0.3, ...],
+    property: 'embedding'
+  },
+  similarity: 0.8,
+  limit: 5
+})
+```
+
+### Hybrid Search
+
+```typescript
+const results = await search(db, {
+  mode: 'hybrid',
+  term: 'noise cancelling headphones',
+  vector: {
+    value: [0.1, 0.2, 0.3, ...],
+    property: 'embedding'
+  },
+  hybridWeights: {
+    text: 0.3,
+    vector: 0.7
+  },
+  limit: 10
+})
+```
+
+### Search with Filters
+
+```typescript
+const results = await search(db, {
+  term: 'headphones',
+  where: {
+    price: {
+      lt: 100,
+      gte: 50
+    }
+  }
+})
+```
+
+### Search with Facets
+
+```typescript
+const results = await search(db, {
+  term: 'electronics',
+  facets: {
+    category: {
+      limit: 10,
+      sort: 'DESC'
+    }
+  }
+})
+
+console.log(results.facets)
+// { category: { count: 50, values: { 'Audio': 20, 'Video': 30 } } }
+```
+
+## Related
+
+- [searchVector()](/api/search-vector)
+- [Filters](/search/filters)
+- [Facets](/search/facets)
+- [Vector Search](/search/vector-search)

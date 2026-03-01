@@ -1,0 +1,568 @@
+---
+title: Data Persistence
+description: Save and restore your Orama database state for persistent storage
+icon: floppy-disk
+---
+
+## Overview
+
+Orama provides built-in serialization capabilities that allow you to save your entire database state to a persistent format and restore it later. This is essential for applications that need to maintain search indexes across sessions or deploy pre-built indexes.
+
+<Info>
+The serialization format includes all data: documents, indexes, sorting information, pinning rules, and language settings.
+</Info>
+
+## Core Concepts
+
+### What Gets Serialized
+
+When you save an Orama database, the following components are persisted:
+
+<CardGroup cols={3}>
+  <Card title="Documents" icon="file-lines">
+    All inserted documents with their original data
+  </Card>
+  <Card title="Indexes" icon="list-tree">
+    Full-text search indexes and inverted indexes
+  </Card>
+  <Card title="Sorting Data" icon="arrow-down-1-9">
+    Pre-computed sorting information for fast results
+  </Card>
+  <Card title="Pinning Rules" icon="thumbtack">
+    All merchandising and pinning configurations
+  </Card>
+  <Card title="Document IDs" icon="hashtag">
+    Internal document ID mappings
+  </Card>
+  <Card title="Language" icon="language">
+    Tokenizer language configuration
+  </Card>
+</CardGroup>
+
+## Basic Usage
+
+### Saving a Database
+
+```typescript
+import { create, insert, save } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    category: 'string',
+    price: 'number'
+  }
+})
+
+// Insert some documents
+await insert(db, {
+  title: 'Wireless Headphones',
+  description: 'High-quality bluetooth headphones',
+  category: 'electronics',
+  price: 99.99
+})
+
+await insert(db, {
+  title: 'Running Shoes',
+  description: 'Comfortable athletic shoes',
+  category: 'sports',
+  price: 79.99
+})
+
+// Save the entire database state
+const serialized = await save(db)
+
+// serialized is a plain JavaScript object that can be converted to JSON
+const json = JSON.stringify(serialized)
+```
+
+### Loading a Database
+
+```typescript
+import { create, load } from '@orama/orama'
+
+// Create a new database instance with the same schema
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    category: 'string',
+    price: 'number'
+  }
+})
+
+// Load the previously saved data
+const serialized = JSON.parse(json)
+await load(db, serialized)
+
+// The database now contains all previously inserted documents
+// and can be searched immediately
+```
+
+<Note>
+The schema must match the original database schema when loading. Orama does not perform schema migration.
+</Note>
+
+## File System Persistence
+
+### Node.js Example
+
+```typescript
+import { create, insert, save, load } from '@orama/orama'
+import { writeFile, readFile } from 'fs/promises'
+import { join } from 'path'
+
+const CACHE_PATH = join(process.cwd(), 'orama-db.json')
+
+// Save to file
+async function saveDatabase(db) {
+  const serialized = await save(db)
+  await writeFile(CACHE_PATH, JSON.stringify(serialized), 'utf-8')
+  console.log('Database saved to disk')
+}
+
+// Load from file
+async function loadDatabase() {
+  const db = await create({
+    schema: {
+      title: 'string',
+      description: 'string'
+    }
+  })
+  
+  try {
+    const data = await readFile(CACHE_PATH, 'utf-8')
+    const serialized = JSON.parse(data)
+    await load(db, serialized)
+    console.log('Database loaded from disk')
+  } catch (error) {
+    console.log('No cached database found, starting fresh')
+  }
+  
+  return db
+}
+
+// Usage
+const db = await loadDatabase()
+
+// Work with the database
+await insert(db, { title: 'New Item', description: 'Description' })
+
+// Save when done
+await saveDatabase(db)
+```
+
+### Browser Example with LocalStorage
+
+```typescript
+import { create, insert, save, load } from '@orama/orama'
+
+const STORAGE_KEY = 'orama-database'
+
+// Save to localStorage
+async function saveToLocalStorage(db) {
+  const serialized = await save(db)
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(serialized))
+  console.log('Database saved to localStorage')
+}
+
+// Load from localStorage
+async function loadFromLocalStorage() {
+  const db = await create({
+    schema: {
+      title: 'string',
+      content: 'string',
+      tags: 'string[]'
+    }
+  })
+  
+  const stored = localStorage.getItem(STORAGE_KEY)
+  if (stored) {
+    const serialized = JSON.parse(stored)
+    await load(db, serialized)
+    console.log('Database loaded from localStorage')
+  }
+  
+  return db
+}
+
+// Usage in a web application
+const db = await loadFromLocalStorage()
+
+// Add new content
+await insert(db, {
+  title: 'Article Title',
+  content: 'Article content...',
+  tags: ['javascript', 'search']
+})
+
+// Persist changes
+await saveToLocalStorage(db)
+```
+
+<Warning>
+LocalStorage has a size limit (typically 5-10MB). For larger datasets, consider IndexedDB or server-side storage.
+</Warning>
+
+## Advanced Patterns
+
+### Periodic Auto-Save
+
+```typescript
+import { create, save } from '@orama/orama'
+import { writeFile } from 'fs/promises'
+
+class PersistentDatabase {
+  private db: any
+  private autoSaveInterval: NodeJS.Timeout | null = null
+  private isDirty: boolean = false
+  
+  constructor(private dbPath: string) {}
+  
+  async initialize(schema: any) {
+    this.db = await create({ schema })
+    
+    // Try to load existing data
+    try {
+      const data = await readFile(this.dbPath, 'utf-8')
+      await load(this.db, JSON.parse(data))
+    } catch {}
+    
+    // Start auto-save
+    this.startAutoSave(30000) // Save every 30 seconds
+    
+    return this.db
+  }
+  
+  markDirty() {
+    this.isDirty = true
+  }
+  
+  async save() {
+    if (!this.isDirty) return
+    
+    const serialized = await save(this.db)
+    await writeFile(this.dbPath, JSON.stringify(serialized), 'utf-8')
+    this.isDirty = false
+    console.log('Database auto-saved')
+  }
+  
+  startAutoSave(intervalMs: number) {
+    this.autoSaveInterval = setInterval(() => {
+      this.save().catch(console.error)
+    }, intervalMs)
+  }
+  
+  async dispose() {
+    if (this.autoSaveInterval) {
+      clearInterval(this.autoSaveInterval)
+    }
+    await this.save() // Final save
+  }
+}
+
+// Usage
+const persistentDb = new PersistentDatabase('./database.json')
+const db = await persistentDb.initialize({
+  schema: { title: 'string', content: 'string' }
+})
+
+// After any insert/update/delete
+await insert(db, { title: 'Test', content: 'Content' })
+persistentDb.markDirty()
+
+// Cleanup on shutdown
+process.on('SIGTERM', async () => {
+  await persistentDb.dispose()
+  process.exit(0)
+})
+```
+
+### Compressed Storage
+
+```typescript
+import { create, save, load } from '@orama/orama'
+import { gzip, gunzip } from 'zlib'
+import { promisify } from 'util'
+import { writeFile, readFile } from 'fs/promises'
+
+const gzipAsync = promisify(gzip)
+const gunzipAsync = promisify(gunzip)
+
+// Save with compression
+async function saveCompressed(db, filePath) {
+  const serialized = await save(db)
+  const json = JSON.stringify(serialized)
+  const compressed = await gzipAsync(json)
+  await writeFile(filePath, compressed)
+  
+  console.log(`Saved: ${json.length} bytes -> ${compressed.length} bytes`)
+  console.log(`Compression ratio: ${(compressed.length / json.length * 100).toFixed(1)}%`)
+}
+
+// Load with decompression
+async function loadCompressed(db, filePath) {
+  const compressed = await readFile(filePath)
+  const json = await gunzipAsync(compressed)
+  const serialized = JSON.parse(json.toString())
+  await load(db, serialized)
+}
+
+// Usage
+const db = await create({
+  schema: { title: 'string', content: 'string' }
+})
+
+await saveCompressed(db, 'database.json.gz')
+await loadCompressed(db, 'database.json.gz')
+```
+
+## Cloud Storage Integration
+
+### AWS S3 Example
+
+```typescript
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { create, save, load } from '@orama/orama'
+
+const s3Client = new S3Client({ region: 'us-east-1' })
+
+async function saveToS3(db, bucket: string, key: string) {
+  const serialized = await save(db)
+  const json = JSON.stringify(serialized)
+  
+  await s3Client.send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: json,
+    ContentType: 'application/json'
+  }))
+  
+  console.log(`Database saved to s3://${bucket}/${key}`)
+}
+
+async function loadFromS3(bucket: string, key: string) {
+  const db = await create({
+    schema: { /* your schema */ }
+  })
+  
+  try {
+    const response = await s3Client.send(new GetObjectCommand({
+      Bucket: bucket,
+      Key: key
+    }))
+    
+    const json = await response.Body.transformToString()
+    const serialized = JSON.parse(json)
+    await load(db, serialized)
+    
+    console.log(`Database loaded from s3://${bucket}/${key}`)
+  } catch (error) {
+    console.log('No database found in S3, starting fresh')
+  }
+  
+  return db
+}
+
+// Usage
+const db = await loadFromS3('my-bucket', 'orama-databases/production.json')
+await insert(db, { /* data */ })
+await saveToS3(db, 'my-bucket', 'orama-databases/production.json')
+```
+
+## Build-Time Index Generation
+
+### Next.js Example
+
+```typescript
+// scripts/build-search-index.ts
+import { create, insert, save } from '@orama/orama'
+import { writeFile } from 'fs/promises'
+import { join } from 'path'
+
+interface BlogPost {
+  slug: string
+  title: string
+  excerpt: string
+  content: string
+  tags: string[]
+}
+
+async function buildSearchIndex() {
+  console.log('Building search index...')
+  
+  const db = await create({
+    schema: {
+      slug: 'string',
+      title: 'string',
+      excerpt: 'string',
+      content: 'string',
+      tags: 'string[]'
+    }
+  })
+  
+  // Fetch all blog posts (from your CMS, file system, etc.)
+  const posts: BlogPost[] = await fetchAllBlogPosts()
+  
+  // Insert all posts
+  for (const post of posts) {
+    await insert(db, post)
+  }
+  
+  // Save the index
+  const serialized = await save(db)
+  const outputPath = join(process.cwd(), 'public', 'search-index.json')
+  await writeFile(outputPath, JSON.stringify(serialized))
+  
+  console.log(`Search index built: ${posts.length} documents`)
+}
+
+buildSearchIndex().catch(console.error)
+```
+
+```typescript
+// app/search/page.tsx
+import { create, load, search } from '@orama/orama'
+
+export default async function SearchPage() {
+  // Load the pre-built index
+  const db = await create({
+    schema: {
+      slug: 'string',
+      title: 'string',
+      excerpt: 'string',
+      content: 'string',
+      tags: 'string[]'
+    }
+  })
+  
+  const response = await fetch('/search-index.json')
+  const serialized = await response.json()
+  await load(db, serialized)
+  
+  // Now ready to search
+  const results = await search(db, {
+    term: 'search query'
+  })
+  
+  return <SearchResults results={results} />
+}
+```
+
+<Tip>
+Pre-building search indexes at build time significantly improves initial load performance in production applications.
+</Tip>
+
+## Data Structure
+
+The serialized data structure includes:
+
+```typescript
+interface RawData {
+  internalDocumentIDStore: unknown  // Document ID mappings
+  index: unknown                    // Search indexes
+  docs: unknown                     // Document store
+  sorting: unknown                  // Sorting data
+  pinning: unknown                  // Pinning rules
+  language: Language                // Tokenizer language
+}
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Version Your Indexes">
+    Include version metadata in your serialized data to handle schema changes:
+    
+    ```typescript
+    const serialized = await save(db)
+    const versioned = {
+      version: '1.0.0',
+      schema: { /* schema definition */ },
+      data: serialized,
+      createdAt: new Date().toISOString()
+    }
+    ```
+  </Step>
+  
+  <Step title="Validate Before Loading">
+    Verify the integrity of serialized data before loading:
+    
+    ```typescript
+    function validateSerializedData(data: any): boolean {
+      return data && 
+             typeof data === 'object' &&
+             'index' in data &&
+             'docs' in data &&
+             'language' in data
+    }
+    ```
+  </Step>
+  
+  <Step title="Handle Load Failures">
+    Always have a fallback when loading fails:
+    
+    ```typescript
+    try {
+      await load(db, serialized)
+    } catch (error) {
+      console.error('Failed to load database:', error)
+      // Rebuild from source or use empty database
+    }
+    ```
+  </Step>
+  
+  <Step title="Compress Large Indexes">
+    Use compression for large datasets to reduce storage costs and transfer time.
+  </Step>
+  
+  <Step title="Consider Incremental Updates">
+    For frequently changing data, consider a hybrid approach: load base index + apply recent changes.
+  </Step>
+</Steps>
+
+## Performance Considerations
+
+<CardGroup cols={2}>
+  <Card title="Serialization Time" icon="clock">
+    Serialization time grows linearly with database size. For large databases (100k+ documents), expect 1-5 seconds.
+  </Card>
+  <Card title="Load Time" icon="hourglass-half">
+    Loading is typically faster than building from scratch. A 10MB index loads in ~100-500ms.
+  </Card>
+  <Card title="Memory Usage" icon="memory">
+    The serialized object exists in memory before being written. Ensure sufficient RAM for large indexes.
+  </Card>
+  <Card title="Storage Size" icon="hard-drive">
+    Expect ~2-5x the size of your original documents due to index structures. Use compression to reduce this.
+  </Card>
+</CardGroup>
+
+## API Reference
+
+### save
+
+Serializes the entire database to a plain JavaScript object.
+
+```typescript
+function save<T extends AnyOrama>(orama: T): RawData
+```
+
+**Returns:** RawData object containing all database state
+
+### load
+
+Restores a database from serialized data.
+
+```typescript
+function load<T extends AnyOrama>(orama: T, raw: RawData): void
+```
+
+**Parameters:**
+- `orama`: The database instance to load into
+- `raw`: Serialized data from a previous `save()` call
+
+<Warning>
+The database must be created with the same schema as the original database before loading.
+</Warning>

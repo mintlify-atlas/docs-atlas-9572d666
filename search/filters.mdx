@@ -1,0 +1,524 @@
+---
+title: Filters
+description: Filter search results using the where clause
+---
+
+# Filters
+
+Filters allow you to narrow down search results based on specific property values. You can filter by numbers, strings, booleans, enums, and even perform geospatial filtering.
+
+## Basic Filtering
+
+Use the `where` clause to filter search results:
+
+```javascript
+import { create, insert, search } from '@orama/orama'
+
+const db = create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    price: 'number',
+    category: 'string'
+  }
+})
+
+insert(db, {
+  title: 'Noise cancelling headphones',
+  description: 'Best noise cancelling headphones on the market',
+  price: 99.99,
+  category: 'electronics'
+})
+
+const results = search(db, {
+  term: 'Headphones',
+  where: {
+    price: {
+      lt: 100
+    }
+  }
+})
+```
+
+## Filter Operators
+
+### Number Filters
+
+Filter numeric properties using comparison operators:
+
+<CodeGroup>
+```javascript Less Than
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    price: {
+      lt: 100
+    }
+  }
+})
+```
+
+```javascript Greater Than or Equal
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    price: {
+      gte: 50
+    }
+  }
+})
+```
+
+```javascript Between Range
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    price: {
+      between: [50, 100]
+    }
+  }
+})
+```
+
+```javascript Equal To
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    price: {
+      eq: 99.99
+    }
+  }
+})
+```
+</CodeGroup>
+
+<ParamField path="gt" type="number">
+  Greater than
+</ParamField>
+
+<ParamField path="gte" type="number">
+  Greater than or equal to
+</ParamField>
+
+<ParamField path="lt" type="number">
+  Less than
+</ParamField>
+
+<ParamField path="lte" type="number">
+  Less than or equal to
+</ParamField>
+
+<ParamField path="eq" type="number">
+  Equal to
+</ParamField>
+
+<ParamField path="between" type="[number, number]">
+  Between two values (inclusive)
+</ParamField>
+
+### String Filters
+
+Filter string properties by exact match or array of values:
+
+<CodeGroup>
+```javascript Exact Match
+const results = search(db, {
+  term: 'product',
+  where: {
+    category: 'electronics'
+  }
+})
+```
+
+```javascript Multiple Values
+const results = search(db, {
+  term: 'product',
+  where: {
+    category: ['electronics', 'audio', 'accessories']
+  }
+})
+```
+</CodeGroup>
+
+### Boolean Filters
+
+Filter by boolean values:
+
+```javascript
+const db = create({
+  schema: {
+    title: 'string',
+    inStock: 'boolean'
+  }
+})
+
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    inStock: true
+  }
+})
+```
+
+### Enum Filters
+
+Filter enum properties with comparison operators:
+
+<CodeGroup>
+```javascript Equal To
+const results = search(db, {
+  term: 'movie',
+  where: {
+    genre: {
+      eq: 'drama'
+    }
+  }
+})
+```
+
+```javascript In Array
+const results = search(db, {
+  term: 'movie',
+  where: {
+    genre: {
+      in: ['drama', 'comedy', 'action']
+    }
+  }
+})
+```
+
+```javascript Not In Array
+const results = search(db, {
+  term: 'movie',
+  where: {
+    genre: {
+      nin: ['horror', 'thriller']
+    }
+  }
+})
+```
+</CodeGroup>
+
+<ParamField path="eq" type="string | number | boolean">
+  Equal to the specified value
+</ParamField>
+
+<ParamField path="in" type="array">
+  Match any value in the array
+</ParamField>
+
+<ParamField path="nin" type="array">
+  Do not match any value in the array
+</ParamField>
+
+### Array Enum Filters
+
+Filter on enum arrays with contains operators:
+
+```javascript
+const db = create({
+  schema: {
+    title: 'string',
+    tags: 'enum[]'
+  }
+})
+
+insert(db, {
+  title: 'Premium Headphones',
+  tags: ['audio', 'wireless', 'noise-cancelling']
+})
+```
+
+<CodeGroup>
+```javascript Contains All
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    tags: {
+      containsAll: ['audio', 'wireless']
+    }
+  }
+})
+```
+
+```javascript Contains Any
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    tags: {
+      containsAny: ['wireless', 'bluetooth']
+    }
+  }
+})
+```
+</CodeGroup>
+
+<ParamField path="containsAll" type="array">
+  Document must contain all specified values
+</ParamField>
+
+<ParamField path="containsAny" type="array">
+  Document must contain at least one specified value
+</ParamField>
+
+## Logical Operators
+
+### AND Conditions
+
+Combine multiple filter conditions (all must match):
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    and: [
+      {
+        price: {
+          gte: 50
+        }
+      },
+      {
+        price: {
+          lt: 100
+        }
+      },
+      {
+        category: 'electronics'
+      }
+    ]
+  }
+})
+```
+
+<Info>
+Multiple properties in the same `where` object are implicitly combined with AND.
+</Info>
+
+### OR Conditions
+
+Match any of the specified conditions:
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    or: [
+      {
+        category: 'electronics'
+      },
+      {
+        category: 'audio'
+      },
+      {
+        price: {
+          lt: 50
+        }
+      }
+    ]
+  }
+})
+```
+
+### NOT Conditions
+
+Exclude documents matching the condition:
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    not: {
+      category: 'refurbished'
+    }
+  }
+})
+```
+
+### Complex Nested Conditions
+
+Combine multiple logical operators:
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    and: [
+      {
+        or: [
+          { category: 'electronics' },
+          { category: 'audio' }
+        ]
+      },
+      {
+        price: {
+          lt: 100
+        }
+      },
+      {
+        not: {
+          brand: 'generic'
+        }
+      }
+    ]
+  }
+})
+```
+
+## Filter-Only Searches
+
+You can perform filter-only searches without a search term:
+
+```javascript
+// Returns all documents with price less than 100
+const results = search(db, {
+  where: {
+    price: {
+      lt: 100
+    }
+  }
+})
+```
+
+<Note>
+When no `term` is provided, Orama returns all documents matching the filter with a score of 0.
+</Note>
+
+## Nested Property Filters
+
+Filter on nested object properties:
+
+```javascript
+const db = create({
+  schema: {
+    title: 'string',
+    meta: {
+      rating: 'number',
+      reviews: 'number'
+    }
+  }
+})
+
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    'meta.rating': {
+      gte: 4.5
+    }
+  }
+})
+```
+
+## Combining Filters with Search Modes
+
+### With Full-Text Search
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  mode: 'fulltext',
+  where: {
+    price: {
+      lt: 100
+    },
+    inStock: true
+  }
+})
+```
+
+### With Vector Search
+
+```javascript
+const results = search(db, {
+  mode: 'vector',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  where: {
+    price: {
+      lt: 100
+    }
+  }
+})
+```
+
+### With Hybrid Search
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  where: {
+    category: 'electronics',
+    price: {
+      between: [50, 150]
+    }
+  }
+})
+```
+
+## Performance Considerations
+
+<Steps>
+  <Step title="Index Frequently Filtered Properties">
+    Properties used in filters should be indexed for best performance:
+    ```javascript
+    create({
+      schema: {
+        price: 'number',    // Automatically indexed
+        category: 'string'  // Automatically indexed
+      }
+    })
+    ```
+  </Step>
+  
+  <Step title="Use Specific Operators">
+    Use `eq` for exact matches when possible, as it's faster than range queries
+  </Step>
+  
+  <Step title="Minimize Complex Nesting">
+    Deep nesting of logical operators can impact performance. Keep filters as simple as possible.
+  </Step>
+  
+  <Step title="Filter Before Search">
+    Filters are applied during search, reducing the result set efficiently
+  </Step>
+</Steps>
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="E-commerce" icon="shopping-cart">
+    Filter products by price range, category, and availability
+  </Card>
+  <Card title="Content Filtering" icon="filter">
+    Filter articles by date, author, or category
+  </Card>
+  <Card title="User Search" icon="users">
+    Find users by role, status, or registration date
+  </Card>
+  <Card title="Inventory" icon="boxes">
+    Filter items by stock status, location, or quantity
+  </Card>
+</CardGroup>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Geosearch" icon="map-location-dot" href="/search/geosearch">
+    Filter by geographic location and radius
+  </Card>
+  <Card title="Facets" icon="list" href="/search/facets">
+    Generate filter options from search results
+  </Card>
+  <Card title="Sorting" icon="arrow-down-wide-short" href="/search/sorting">
+    Sort filtered results by properties
+  </Card>
+  <Card title="Full-Text Search" icon="text" href="/search/full-text-search">
+    Combine filters with text search
+  </Card>
+</CardGroup>

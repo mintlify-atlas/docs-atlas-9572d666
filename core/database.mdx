@@ -1,0 +1,210 @@
+---
+title: Database
+description: Understanding the Orama database instance and how to create and configure it
+---
+
+The Orama database is the core instance that manages your search engine. It holds the schema, data structures, and all the components needed to index and search documents.
+
+## Creating a Database
+
+Use the `create` function to initialize a new Orama database instance:
+
+```typescript
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    price: 'number',
+    inStock: 'boolean'
+  }
+})
+```
+
+## Configuration Options
+
+The `create` function accepts several configuration options:
+
+### Schema (Required)
+
+Defines the structure of your documents. See [Schema](/core/schema) for detailed information.
+
+```typescript
+const db = await create({
+  schema: {
+    title: 'string',
+    author: 'string',
+    year: 'number'
+  }
+})
+```
+
+### Language
+
+Specify the language for tokenization and text processing:
+
+```typescript
+const db = await create({
+  schema: { /* ... */ },
+  language: 'spanish'
+})
+```
+
+<Note>
+  Orama supports 30+ languages including English, Spanish, French, German, Italian, and many more.
+  See the [supported languages list](/open-source/supported-languages).
+</Note>
+
+### Sorting Configuration
+
+Control which properties can be used for sorting:
+
+```typescript
+const db = await create({
+  schema: { /* ... */ },
+  sort: {
+    enabled: true,
+    unsortableProperties: ['description'] // Exclude from sorting
+  }
+})
+```
+
+### Custom Components
+
+Replace default components with custom implementations:
+
+```typescript
+const db = await create({
+  schema: { /* ... */ },
+  components: {
+    tokenizer: customTokenizer,
+    index: customIndex,
+    documentsStore: customDocStore,
+    sorter: customSorter
+  }
+})
+```
+
+Learn more about [Custom Components](/core/components).
+
+### Plugins
+
+Extend functionality with plugins:
+
+```typescript
+import { pluginSecureProxy } from '@orama/plugin-secure-proxy'
+
+const db = await create({
+  schema: { /* ... */ },
+  plugins: [
+    await pluginSecureProxy({ apiKey: 'your-api-key' })
+  ]
+})
+```
+
+### Custom ID
+
+Provide a custom identifier for the database instance:
+
+```typescript
+const db = await create({
+  schema: { /* ... */ },
+  id: 'my-custom-db-id'
+})
+
+console.log(db.id) // 'my-custom-db-id'
+```
+
+## Database Instance Properties
+
+The created database instance contains several internal properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Unique identifier for the database instance |
+| `schema` | `AnySchema` | The schema definition |
+| `data` | `object` | Internal data structures (index, docs, sorting) |
+| `tokenizer` | `Tokenizer` | Tokenizer instance used for text processing |
+| `index` | `IIndex` | Index component for storing searchable data |
+| `documentsStore` | `IDocumentsStore` | Document storage component |
+| `sorter` | `ISorter` | Sorting component |
+| `version` | `string` | Orama version number |
+
+## Type Signatures
+
+From `methods/create.ts:76-95`:
+
+```typescript
+interface CreateArguments<OramaSchema, TIndex, TDocumentStore, TSorter, TPinning> {
+  schema: OramaSchema
+  sort?: SorterConfig
+  language?: string
+  components?: Components<
+    Orama<OramaSchema, TIndex, TDocumentStore, TSorter, TPinning>,
+    OramaSchema,
+    TIndex,
+    TDocumentStore,
+    TSorter,
+    TPinning
+  >
+  plugins?: OramaPlugin[]
+  id?: string
+}
+
+function create<
+  OramaSchema extends AnySchema,
+  TIndex = IIndex<Index>,
+  TDocumentStore = IDocumentsStore<DocumentsStore>,
+  TSorter = ISorter<Sorter>,
+  TPinning = any
+>(args: CreateArguments<...>): Orama<...>
+```
+
+## Database Lifecycle
+
+The database instance is created with all necessary components initialized:
+
+1. **Tokenizer** - Created based on language configuration
+2. **Index** - Initialized with the schema structure
+3. **Documents Store** - Ready to store documents
+4. **Sorter** - Configured with sortable properties
+5. **Hooks** - Registered from plugins
+6. **afterCreate Hook** - Executed after initialization
+
+## Internal Architecture
+
+Orama databases contain the following internal data structures:
+
+```typescript
+db.data = {
+  index: /* Radix/AVL/Bool/Flat/BKD trees */,
+  docs: /* Document storage */,
+  sorting: /* Sorted indexes */,
+  pinning: /* Pinned results */
+}
+```
+
+Each component is optimized for specific operations:
+
+- **Radix trees** for string full-text search
+- **AVL trees** for numeric range queries
+- **Bool nodes** for boolean filters
+- **Flat trees** for enum types
+- **BKD trees** for geospatial queries
+- **Vector indexes** for similarity search
+
+<Check>
+  The database instance is immutable after creation. To modify the schema, you need to create a new database.
+</Check>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Schema" icon="table" href="/core/schema">
+    Define the structure of your documents
+  </Card>
+  <Card title="Documents" icon="file" href="/core/documents">
+    Learn about inserting and managing documents
+  </Card>
+</CardGroup>

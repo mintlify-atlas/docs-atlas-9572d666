@@ -1,0 +1,194 @@
+---
+title: deletePin()
+description: Remove a pinning rule from the database
+---
+
+Remove a pinning rule from the database by its ID. Returns `true` if the rule was found and deleted, `false` if the rule didn't exist.
+
+## Signature
+
+```typescript
+function deletePin<T extends AnyOrama>(
+  orama: T,
+  ruleId: string
+): boolean
+```
+
+## Parameters
+
+<ParamField path="orama" type="AnyOrama" required>
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="ruleId" type="string" required>
+  The unique ID of the pinning rule to delete.
+</ParamField>
+
+## Returns
+
+<ResponseField name="deleted" type="boolean">
+  - `true` if the rule was found and successfully deleted
+  - `false` if no rule with the given ID exists
+</ResponseField>
+
+## Examples
+
+### Basic Deletion
+
+```typescript
+import { create, insertPin, deletePin } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string'
+  }
+})
+
+// Insert a pinning rule
+insertPin(db, {
+  id: 'featured-products',
+  conditions: [
+    { anchoring: 'contains', pattern: 'featured' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: '2', position: 0 }
+    ]
+  }
+})
+
+// Delete the rule
+const deleted = deletePin(db, 'featured-products')
+console.log(deleted) // true
+
+// Attempting to delete again
+const deleted2 = deletePin(db, 'featured-products')
+console.log(deleted2) // false (already deleted)
+```
+
+### Conditional Deletion
+
+```typescript
+const ruleId = 'seasonal-promotion'
+
+if (deletePin(db, ruleId)) {
+  console.log(`Rule '${ruleId}' was successfully deleted`)
+} else {
+  console.log(`Rule '${ruleId}' was not found`)
+}
+```
+
+### Delete Multiple Rules
+
+```typescript
+const rulesToDelete = [
+  'summer-sale',
+  'holiday-promo',
+  'back-to-school'
+]
+
+for (const ruleId of rulesToDelete) {
+  const deleted = deletePin(db, ruleId)
+  if (deleted) {
+    console.log(`Deleted: ${ruleId}`)
+  }
+}
+```
+
+### Delete All Rules
+
+```typescript
+import { getAllPins, deletePin } from '@orama/orama'
+
+// Get all existing rules
+const allRules = getAllPins(db)
+
+// Delete each one
+for (const rule of allRules) {
+  deletePin(db, rule.id)
+}
+
+console.log(`Deleted ${allRules.length} rules`)
+```
+
+### Safe Deletion with Verification
+
+```typescript
+import { getPin, deletePin } from '@orama/orama'
+
+const ruleId = 'my-rule'
+
+// Check if rule exists before deleting
+const rule = getPin(db, ruleId)
+
+if (rule) {
+  console.log('Deleting rule:', rule)
+  const deleted = deletePin(db, ruleId)
+  console.log('Deleted:', deleted) // true
+} else {
+  console.log('Rule not found')
+}
+```
+
+### Temporary Rule Pattern
+
+```typescript
+// Create a temporary promotion
+insertPin(db, {
+  id: 'flash-sale',
+  conditions: [
+    { anchoring: 'contains', pattern: 'flash' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: 'sale-product-1', position: 0 }
+    ]
+  }
+})
+
+// Remove after 1 hour
+setTimeout(() => {
+  const deleted = deletePin(db, 'flash-sale')
+  if (deleted) {
+    console.log('Flash sale promotion ended')
+  }
+}, 60 * 60 * 1000)
+```
+
+### Bulk Operations with Error Tracking
+
+```typescript
+const rulesToDelete = ['rule1', 'rule2', 'rule3', 'rule4']
+const results = {
+  deleted: [],
+  notFound: []
+}
+
+for (const ruleId of rulesToDelete) {
+  if (deletePin(db, ruleId)) {
+    results.deleted.push(ruleId)
+  } else {
+    results.notFound.push(ruleId)
+  }
+}
+
+console.log(`Successfully deleted: ${results.deleted.length}`)
+console.log(`Not found: ${results.notFound.length}`)
+```
+
+## Notes
+
+- Deletion is immediate and affects subsequent searches
+- No error is thrown if the rule doesn't exist - the function returns `false` instead
+- Deleted rules cannot be recovered - you'll need to use `insertPin()` to recreate them
+- Consider using `getPin()` to retrieve and store a rule before deletion if you might need to restore it
+- This operation does not affect documents, only the pinning rules
+
+## Related
+
+- [insertPin()](/api/insert-pin)
+- [updatePin()](/api/update-pin)
+- [getPin()](/api/get-pin)
+- [getAllPins()](/api/get-all-pins)
+- [Pinning Guide](/search/pinning)

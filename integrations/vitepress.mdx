@@ -1,0 +1,407 @@
+---
+title: Vitepress Integration
+description: Add powerful Orama search to your Vitepress documentation site
+---
+
+The Orama Vitepress plugin provides seamless search integration for Vitepress sites, with automatic indexing and a beautiful search interface powered by Orama Searchbox.
+
+## Installation
+
+Install the plugin using your preferred package manager:
+
+<CodeGroup>
+
+```bash npm
+npm install @orama/plugin-vitepress
+```
+
+```bash yarn
+yarn add @orama/plugin-vitepress
+```
+
+```bash pnpm
+pnpm add @orama/plugin-vitepress
+```
+
+</CodeGroup>
+
+## Quick Start
+
+Add the Orama plugin to your `.vitepress/config.js` or `.vitepress/config.ts` file:
+
+```javascript .vitepress/config.js
+import { defineConfig } from 'vitepress'
+import { OramaPlugin } from '@orama/plugin-vitepress'
+
+export default defineConfig({
+  // ... other config options
+  vite: {
+    plugins: [OramaPlugin()]
+  }
+})
+```
+
+<Note>
+  The plugin automatically replaces the default Vitepress search with Orama's search interface.
+</Note>
+
+## Configuration
+
+### Basic Configuration
+
+The plugin works out of the box with zero configuration:
+
+```typescript .vitepress/config.ts
+import { defineConfig } from 'vitepress'
+import { OramaPlugin } from '@orama/plugin-vitepress'
+
+export default defineConfig({
+  title: 'My Documentation',
+  description: 'Documentation site powered by Vitepress and Orama',
+  
+  vite: {
+    plugins: [OramaPlugin()]
+  }
+})
+```
+
+### With Analytics
+
+Enable search analytics to track user queries:
+
+```typescript .vitepress/config.ts
+import { defineConfig } from 'vitepress'
+import { OramaPlugin } from '@orama/plugin-vitepress'
+
+export default defineConfig({
+  vite: {
+    plugins: [
+      OramaPlugin({
+        analytics: {
+          enabled: true,
+          apiKey: 'your-analytics-api-key',
+          indexId: 'your-index-id'
+        }
+      })
+    ]
+  }
+})
+```
+
+## Configuration Options
+
+<ParamField path="analytics" type="object">
+  Enable and configure search analytics.
+  
+  <Expandable>
+    <ParamField path="analytics.enabled" type="boolean" required>
+      Enable analytics tracking for search queries.
+    </ParamField>
+    
+    <ParamField path="analytics.apiKey" type="string" required>
+      Your Orama Cloud analytics API key.
+    </ParamField>
+    
+    <ParamField path="analytics.indexId" type="string" required>
+      Your Orama Cloud index ID for analytics.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## How It Works
+
+The plugin automatically:
+
+1. **Scans Your Content**: Reads all markdown files from your Vitepress site
+2. **Parses Markdown**: Converts markdown to HTML and extracts content
+3. **Indexes Content**: Creates an Orama search index with:
+   - Page titles
+   - Section headings
+   - Content text
+   - Page paths
+4. **Bundles Index**: Includes the search index in your build
+5. **Replaces Search**: Swaps the default search with Orama Searchbox
+
+## Index Schema
+
+The plugin uses a predefined schema optimized for documentation:
+
+```typescript
+interface OramaSchema {
+  title: string       // Section or page title
+  content: string     // Extracted text content
+  path: string        // URL path with anchor
+  category: string    // Content category
+  section: string     // Parent section name
+}
+```
+
+## Search Features
+
+The Orama Vitepress plugin provides:
+
+<CardGroup cols={2}>
+  <Card title="Full-Text Search" icon="magnifying-glass">
+    Search across all content including titles, headings, and body text
+  </Card>
+  
+  <Card title="Section-Level Results" icon="list">
+    Results are organized by sections for precise navigation
+  </Card>
+  
+  <Card title="Fuzzy Matching" icon="wand-magic-sparkles">
+    Finds results even with typos or partial matches
+  </Card>
+  
+  <Card title="Instant Results" icon="bolt">
+    Lightning-fast client-side search with no server required
+  </Card>
+  
+  <Card title="Keyboard Navigation" icon="keyboard">
+    Full keyboard support with shortcuts (⌘K or Ctrl+K)
+  </Card>
+  
+  <Card title="Responsive Design" icon="mobile">
+    Works seamlessly on desktop and mobile devices
+  </Card>
+</CardGroup>
+
+## Search UI
+
+The plugin uses the Orama Searchbox component, which provides:
+
+- **Modal Interface**: Opens in a modal overlay
+- **Live Results**: Updates as you type
+- **Highlighted Matches**: Shows matched terms in context
+- **Direct Navigation**: Click results to navigate instantly
+- **Keyboard Shortcuts**: Support for arrow keys, Enter, and Escape
+
+### Customization
+
+The search UI automatically adapts to your Vitepress theme:
+
+```typescript .vitepress/config.ts
+import { defineConfig } from 'vitepress'
+import { OramaPlugin } from '@orama/plugin-vitepress'
+
+export default defineConfig({
+  themeConfig: {
+    // Your theme customization
+    // The search UI will match your theme colors
+  },
+  
+  vite: {
+    plugins: [OramaPlugin()]
+  }
+})
+```
+
+## Build Process
+
+During the build, the plugin:
+
+1. Reads all markdown pages from your `docs` directory
+2. Parses frontmatter and content
+3. Extracts sections based on headings (h1-h6)
+4. Creates an Orama database instance
+5. Inserts all content into the database
+6. Persists the database to JSON format
+7. Includes it as a virtual module in the build
+
+### Virtual Module
+
+The plugin creates a virtual module `virtual:search-data` that contains:
+
+```typescript
+{
+  data: string,        // Serialized Orama database
+  analytics: {         // Analytics configuration
+    enabled: boolean,
+    apiKey: string,
+    indexId: string
+  }
+}
+```
+
+## Content Processing
+
+The plugin processes your content intelligently:
+
+### Section Extraction
+
+Content is split by headings to provide precise results:
+
+```markdown
+# Getting Started
+
+Welcome to our documentation...
+
+## Installation
+
+To install, run the following command...
+
+## Configuration
+
+Configure your project by...
+```
+
+This creates three searchable sections:
+1. "Getting Started" with intro content
+2. "Installation" with installation content
+3. "Configuration" with configuration content
+
+### Path Generation
+
+Paths include anchors for direct navigation:
+
+```typescript
+// Page: /guide/introduction.md
+// Heading: ## Quick Start
+// Generated path: /guide/introduction#quick-start
+```
+
+## Advanced Usage
+
+### Custom Base Path
+
+If your site uses a custom base path:
+
+```typescript .vitepress/config.ts
+import { defineConfig } from 'vitepress'
+import { OramaPlugin } from '@orama/plugin-vitepress'
+
+export default defineConfig({
+  base: '/my-docs/',
+  
+  vite: {
+    plugins: [OramaPlugin()]
+  }
+})
+```
+
+The plugin automatically respects the `base` configuration.
+
+### Multi-Language Support
+
+For multi-language sites:
+
+```typescript .vitepress/config.ts
+import { defineConfig } from 'vitepress'
+import { OramaPlugin } from '@orama/plugin-vitepress'
+
+export default defineConfig({
+  locales: {
+    root: {
+      label: 'English',
+      lang: 'en'
+    },
+    fr: {
+      label: 'Français',
+      lang: 'fr'
+    }
+  },
+  
+  vite: {
+    plugins: [OramaPlugin()]
+  }
+})
+```
+
+The plugin indexes all language versions and maintains proper paths.
+
+## Development
+
+When developing locally:
+
+```bash
+npm run docs:dev
+```
+
+The search index is generated on-the-fly and updates as you modify content.
+
+## Production Build
+
+For production builds:
+
+```bash
+npm run docs:build
+```
+
+The optimized search index is included in your static build output.
+
+## Performance
+
+The plugin is optimized for performance:
+
+- **Small Bundle Size**: Minimal impact on your site's bundle
+- **Fast Indexing**: Efficient content processing during build
+- **Instant Search**: Client-side search with no network latency
+- **Lazy Loading**: Search components load on demand
+
+<Info>
+  The search index is compressed and loaded asynchronously, ensuring fast initial page loads.
+</Info>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Search not appearing">
+    Ensure you're using the `vite.plugins` configuration, not the `vite` property directly. The plugin must be added to the plugins array.
+    
+    ```typescript
+    // ✅ Correct
+    vite: { plugins: [OramaPlugin()] }
+    
+    // ❌ Incorrect
+    vite: OramaPlugin()
+    ```
+  </Accordion>
+  
+  <Accordion title="Content not being indexed">
+    Check that your markdown files are in the correct directory (typically `docs/` or the configured source directory). Verify that the files have actual content to index.
+  </Accordion>
+  
+  <Accordion title="Analytics not working">
+    Verify your analytics configuration:
+    - `enabled` must be `true`
+    - `apiKey` must be a valid Orama Cloud analytics key
+    - `indexId` must match your Orama Cloud index
+  </Accordion>
+  
+  <Accordion title="Build errors">
+    Make sure you have all peer dependencies installed:
+    ```bash
+    npm install vue@^3.0.0
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Package Information
+
+- **Package Name:** `@orama/plugin-vitepress`
+- **Version:** 3.1.18
+- **License:** Apache-2.0
+- **Repository:** [github.com/oramasearch/orama](https://github.com/oramasearch/orama)
+
+## Requirements
+
+- Vitepress 1.x
+- Vue ^3.0.0
+- Node.js >= 16
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Searchbox Component" icon="search" href="/open-source/plugins/searchbox">
+    Customize the search UI
+  </Card>
+  <Card title="Orama Core" icon="database" href="/open-source/orama">
+    Learn about the search engine
+  </Card>
+  <Card title="Analytics" icon="chart-simple" href="/cloud/analytics">
+    Track search analytics
+  </Card>
+  <Card title="Full Documentation" icon="book" href="https://docs.orama.com/docs/orama-js/plugins/plugin-vitepress">
+    View the complete guide
+  </Card>
+</CardGroup>

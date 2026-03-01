@@ -1,0 +1,504 @@
+---
+title: Facets
+description: Generate facets for filtering and analytics
+---
+
+# Facets
+
+Facets allow users to narrow down search results by specific attributes or characteristics. They provide aggregated counts of values for properties in your search results, enabling dynamic filtering options.
+
+## What are Facets?
+
+Facets are aggregations that show how many documents in your search results have specific values for a given property. They're commonly used in e-commerce sites for filtering by category, price range, brand, etc.
+
+## Basic Facets
+
+Add facets to your search by specifying the `facets` parameter:
+
+```javascript
+import { create, insert, search } from '@orama/orama'
+
+const db = create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    category: 'string',
+    price: 'number'
+  }
+})
+
+insert(db, {
+  title: 'Wireless Headphones',
+  description: 'Premium wireless headphones',
+  category: 'electronics',
+  price: 99.99
+})
+
+const results = search(db, {
+  term: 'headphones',
+  facets: {
+    category: {
+      limit: 10,
+      sort: 'ASC'
+    }
+  }
+})
+```
+
+## Facet Response
+
+Facets are returned in the search results under the `facets` property:
+
+```javascript
+{
+  count: 10,
+  hits: [...],
+  elapsed: { raw: 123456, formatted: '123μs' },
+  facets: {
+    category: {
+      count: 3,
+      values: {
+        'electronics': 5,
+        'audio': 3,
+        'accessories': 2
+      }
+    }
+  }
+}
+```
+
+<ParamField path="facets[property].count" type="number">
+  The total number of unique values for this facet
+</ParamField>
+
+<ParamField path="facets[property].values" type="Record<string, number>">
+  An object mapping each unique value to its occurrence count
+</ParamField>
+
+## Facet Types
+
+### String Facets
+
+String facets aggregate unique string values and their counts:
+
+```javascript
+const results = search(db, {
+  term: 'Personal Computer',
+  facets: {
+    'category.primary': {
+      limit: 10,    // Maximum number of facet values to return
+      offset: 0,    // Skip first N values
+      sort: 'ASC'   // Sort order: 'ASC', 'DESC', 'asc', 'desc'
+    }
+  }
+})
+```
+
+<ParamField path="limit" type="number" default="10">
+  Maximum number of facet values to return
+</ParamField>
+
+<ParamField path="offset" type="number" default="0">
+  Number of facet values to skip (for pagination)
+</ParamField>
+
+<ParamField path="sort" type="'ASC' | 'DESC' | 'asc' | 'desc'" default="'DESC'">
+  Sort order for facet values by count
+</ParamField>
+
+### Number Facets
+
+Number facets aggregate counts within specified ranges:
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  facets: {
+    price: {
+      ranges: [
+        { from: 0, to: 50 },
+        { from: 50, to: 100 },
+        { from: 100, to: 200 },
+        { from: 200, to: 500 }
+      ]
+    }
+  }
+})
+```
+
+Response:
+
+```javascript
+{
+  facets: {
+    price: {
+      count: 4,
+      values: {
+        '0-50': 12,
+        '50-100': 25,
+        '100-200': 18,
+        '200-500': 5
+      }
+    }
+  }
+}
+```
+
+<ParamField path="ranges" type="Array<{from: number, to: number}>" required>
+  Array of range objects defining the buckets for aggregation
+</ParamField>
+
+### Boolean Facets
+
+Boolean facets aggregate true/false counts:
+
+```javascript
+const db = create({
+  schema: {
+    title: 'string',
+    inStock: 'boolean',
+    featured: 'boolean'
+  }
+})
+
+const results = search(db, {
+  term: 'headphones',
+  facets: {
+    inStock: {
+      true: true,
+      false: true
+    },
+    featured: {
+      true: true
+    }
+  }
+})
+```
+
+Response:
+
+```javascript
+{
+  facets: {
+    inStock: {
+      count: 2,
+      values: {
+        'true': 15,
+        'false': 5
+      }
+    },
+    featured: {
+      count: 1,
+      values: {
+        'true': 8
+      }
+    }
+  }
+}
+```
+
+<ParamField path="true" type="boolean" optional>
+  Include count of `true` values
+</ParamField>
+
+<ParamField path="false" type="boolean" optional>
+  Include count of `false` values
+</ParamField>
+
+## Multiple Facets
+
+You can request multiple facets in a single search:
+
+```javascript
+const results = search(db, {
+  term: 'laptop',
+  facets: {
+    category: {
+      limit: 10,
+      sort: 'DESC'
+    },
+    brand: {
+      limit: 20,
+      sort: 'DESC'
+    },
+    price: {
+      ranges: [
+        { from: 0, to: 500 },
+        { from: 500, to: 1000 },
+        { from: 1000, to: 2000 }
+      ]
+    },
+    inStock: {
+      true: true,
+      false: true
+    }
+  }
+})
+```
+
+## Nested Property Facets
+
+Facets work with nested object properties:
+
+```javascript
+const db = create({
+  schema: {
+    title: 'string',
+    category: {
+      primary: 'string',
+      secondary: 'string'
+    },
+    meta: {
+      brand: 'string'
+    }
+  }
+})
+
+const results = search(db, {
+  term: 'product',
+  facets: {
+    'category.primary': {
+      limit: 10,
+      sort: 'DESC'
+    },
+    'category.secondary': {
+      limit: 10
+    },
+    'meta.brand': {
+      limit: 20
+    }
+  }
+})
+```
+
+## Facets with Filters
+
+Combine facets with filters to show available options for the current filter state:
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    price: {
+      lt: 100
+    }
+  },
+  facets: {
+    category: {
+      limit: 10
+    },
+    brand: {
+      limit: 10
+    }
+  }
+})
+```
+
+<Info>
+Facets are calculated **after** filters are applied, showing only the values available in the filtered result set.
+</Info>
+
+## Facets with Different Search Modes
+
+### Full-Text Search
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  mode: 'fulltext',
+  facets: {
+    category: { limit: 10 }
+  }
+})
+```
+
+### Vector Search
+
+```javascript
+const results = search(db, {
+  mode: 'vector',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  facets: {
+    category: { limit: 10 }
+  }
+})
+```
+
+### Hybrid Search
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  facets: {
+    category: { limit: 10 },
+    price: {
+      ranges: [
+        { from: 0, to: 100 },
+        { from: 100, to: 200 }
+      ]
+    }
+  }
+})
+```
+
+<Note>
+For hybrid search, facets include results from both full-text and vector searches.
+</Note>
+
+## Preflight Queries with Facets
+
+Get facets without fetching full documents:
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  preflight: true,
+  facets: {
+    category: { limit: 10 },
+    price: {
+      ranges: [
+        { from: 0, to: 100 },
+        { from: 100, to: 200 }
+      ]
+    }
+  }
+})
+
+console.log(results)
+// {
+//   elapsed: { raw: 181208, formatted: '181μs' },
+//   count: 100,
+//   facets: { ... }
+// }
+```
+
+<Info>
+Preflight queries with facets are useful for building filter UIs before loading results.
+</Info>
+
+## Performance Considerations
+
+<Steps>
+  <Step title="Limit Facet Values">
+    Request only the number of facet values you need:
+    ```javascript
+    facets: {
+      category: {
+        limit: 10  // Only get top 10 categories
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Use Appropriate Ranges">
+    For number facets, choose ranges that make sense for your data:
+    ```javascript
+    facets: {
+      price: {
+        ranges: [
+          { from: 0, to: 50 },
+          { from: 50, to: 100 },
+          // Avoid too many small ranges
+        ]
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Index Faceted Properties">
+    All properties are automatically indexed, but consider if you need facets on every property
+  </Step>
+  
+  <Step title="Combine with Preflight">
+    Use preflight queries to get facets without document overhead:
+    ```javascript
+    search(db, {
+      term: 'query',
+      preflight: true,
+      facets: { category: { limit: 10 } }
+    })
+    ```
+  </Step>
+</Steps>
+
+## Building Filter UIs
+
+Facets are perfect for building dynamic filter interfaces:
+
+```javascript
+// 1. Initial search with facets
+const initialResults = search(db, {
+  term: 'headphones',
+  facets: {
+    category: { limit: 10 },
+    brand: { limit: 20 },
+    price: {
+      ranges: [
+        { from: 0, to: 50 },
+        { from: 50, to: 100 },
+        { from: 100, to: 200 }
+      ]
+    },
+    inStock: { true: true, false: true }
+  }
+})
+
+// 2. User selects a filter
+const filteredResults = search(db, {
+  term: 'headphones',
+  where: {
+    category: 'wireless',
+    price: {
+      between: [50, 100]
+    }
+  },
+  facets: {
+    brand: { limit: 20 },
+    inStock: { true: true, false: true }
+  }
+})
+
+// 3. Facets now show only available options for filtered results
+```
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="E-commerce Filters" icon="shopping-cart">
+    Build category, brand, price, and attribute filters
+  </Card>
+  <Card title="Content Analytics" icon="chart-bar">
+    Analyze content distribution by category, author, or date
+  </Card>
+  <Card title="Search Refinement" icon="filter">
+    Help users narrow down large result sets
+  </Card>
+  <Card title="Data Exploration" icon="magnifying-glass-chart">
+    Understand data distribution and patterns
+  </Card>
+</CardGroup>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Filters" icon="filter" href="/search/filters">
+    Apply filters to search results
+  </Card>
+  <Card title="Full-Text Search" icon="text" href="/search/full-text-search">
+    Combine facets with text search
+  </Card>
+  <Card title="Sorting" icon="arrow-down-wide-short" href="/search/sorting">
+    Sort faceted results
+  </Card>
+  <Card title="Hybrid Search" icon="shuffle" href="/search/hybrid-search">
+    Use facets with hybrid search
+  </Card>
+</CardGroup>

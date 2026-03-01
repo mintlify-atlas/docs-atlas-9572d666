@@ -1,0 +1,205 @@
+---
+title: insertPin()
+description: Insert a new pinning rule to promote specific documents in search results
+---
+
+Insert a new pinning rule into the database. Pinning rules allow you to promote specific documents to specific positions in search results based on conditional matching of the search term.
+
+## Signature
+
+```typescript
+function insertPin<T extends AnyOrama>(
+  orama: T,
+  rule: PinRule
+): void
+```
+
+## Parameters
+
+<ParamField path="orama" type="AnyOrama" required>
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="rule" type="PinRule" required>
+  The pinning rule to insert.
+  
+  <ParamField path="id" type="string" required>
+    Unique identifier for the pinning rule. Used to update or delete the rule later.
+  </ParamField>
+  
+  <ParamField path="conditions" type="PinCondition[]" required>
+    Array of conditions that must all match (AND logic) for the rule to apply.
+    
+    Each condition contains:
+    - `anchoring`: How to match the pattern (`'is'` | `'starts_with'` | `'contains'`)
+    - `pattern`: The pattern to match against the search term
+  </ParamField>
+  
+  <ParamField path="consequence" type="object" required>
+    Actions to take when conditions match.
+    
+    <ParamField path="promote" type="PinPromotion[]" required>
+      Array of documents to promote, each containing:
+      - `doc_id`: The document ID to promote
+      - `position`: Target position (0-based index)
+    </ParamField>
+  </ParamField>
+</ParamField>
+
+## Returns
+
+<ResponseField name="void" type="void">
+  This function returns nothing. Throws an error if a rule with the same ID already exists.
+</ResponseField>
+
+## Examples
+
+### Basic Pin Rule
+
+```typescript
+import { create, insert, insertPin, search } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    category: 'string'
+  }
+})
+
+await insert(db, { id: '1', title: 'Product A', category: 'electronics' })
+await insert(db, { id: '2', title: 'Product B', category: 'electronics' })
+await insert(db, { id: '3', title: 'Product C', category: 'electronics' })
+
+// Pin Product B to position 0 when searching for "featured"
+insertPin(db, {
+  id: 'featured-products',
+  conditions: [
+    { anchoring: 'contains', pattern: 'featured' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: '2', position: 0 }
+    ]
+  }
+})
+
+// Product B will now appear first
+const results = await search(db, { term: 'featured products' })
+console.log(results.hits[0].id) // '2'
+```
+
+### Multiple Conditions (AND Logic)
+
+```typescript
+// Only applies when term contains both "premium" AND "sale"
+insertPin(db, {
+  id: 'premium-sale',
+  conditions: [
+    { anchoring: 'contains', pattern: 'premium' },
+    { anchoring: 'contains', pattern: 'sale' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: '5', position: 0 }
+    ]
+  }
+})
+```
+
+### Exact Match Condition
+
+```typescript
+// Only applies when search term exactly matches "best sellers"
+insertPin(db, {
+  id: 'best-sellers',
+  conditions: [
+    { anchoring: 'is', pattern: 'best sellers' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: '10', position: 0 },
+      { doc_id: '15', position: 1 }
+    ]
+  }
+})
+```
+
+### Starts With Condition
+
+```typescript
+// Applies when search term starts with "new"
+insertPin(db, {
+  id: 'new-arrivals',
+  conditions: [
+    { anchoring: 'starts_with', pattern: 'new' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: '20', position: 0 }
+    ]
+  }
+})
+
+// Matches: "new products", "new arrivals", "newest"
+// Does not match: "brand new", "what's new"
+```
+
+### Multiple Promoted Documents
+
+```typescript
+// Pin multiple documents to specific positions
+insertPin(db, {
+  id: 'holiday-promotion',
+  conditions: [
+    { anchoring: 'contains', pattern: 'holiday' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: 'holiday-1', position: 0 },
+      { doc_id: 'holiday-2', position: 1 },
+      { doc_id: 'holiday-3', position: 2 }
+    ]
+  }
+})
+```
+
+## Error Handling
+
+```typescript
+try {
+  insertPin(db, {
+    id: 'my-rule',
+    conditions: [{ anchoring: 'contains', pattern: 'test' }],
+    consequence: { promote: [{ doc_id: '1', position: 0 }] }
+  })
+  
+  // Attempting to insert again with same ID will throw
+  insertPin(db, {
+    id: 'my-rule', // Same ID!
+    conditions: [{ anchoring: 'contains', pattern: 'other' }],
+    consequence: { promote: [{ doc_id: '2', position: 0 }] }
+  })
+} catch (error) {
+  console.error(error.message)
+  // "PINNING_RULE_ALREADY_EXISTS: A pinning rule with id 'my-rule' already exists."
+}
+```
+
+## Notes
+
+- Rule IDs must be unique. Use `updatePin()` to modify existing rules
+- Conditions are case-insensitive and trimmed
+- All conditions in a rule must match (AND logic)
+- Documents are pinned at the specified positions, pushing other results down
+- Pinned documents that don't appear in search results are ignored
+- Pinning rules apply to all search modes (full-text, vector, and hybrid)
+- Pattern matching is performed on the normalized search term
+
+## Related
+
+- [updatePin()](/api/update-pin)
+- [deletePin()](/api/delete-pin)
+- [getPin()](/api/get-pin)
+- [getAllPins()](/api/get-all-pins)
+- [Pinning Guide](/search/pinning)

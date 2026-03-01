@@ -1,0 +1,808 @@
+---
+title: Multi-Language Support
+description: Orama supports 30+ languages with specialized tokenization, stemming, and stopwords
+---
+
+Orama provides comprehensive multi-language support with language-specific tokenization rules, stemmers, and stopword lists for over 30 languages.
+
+## Supported Languages
+
+Orama supports the following languages with full text analysis capabilities:
+
+<CardGroup cols={2}>
+  <Card title="Arabic" icon="language">
+    **Code:** `ar` / `arabic`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Armenian" icon="language">
+    **Code:** `am` / `armenian`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Bulgarian" icon="language">
+    **Code:** `bg` / `bulgarian`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Chinese (Mandarin)" icon="language">
+    **Code:** `zh` / `mandarin`
+    
+    - Tokenization: ✅ (Intl.Segmenter)
+    - Stemming: ❌ (Not applicable)
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Czech" icon="language">
+    **Code:** `cz` / `czech`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Danish" icon="language">
+    **Code:** `dk` / `danish`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Dutch" icon="language">
+    **Code:** `nl` / `dutch`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="English" icon="language">
+    **Code:** `en` / `english` (default)
+    
+    - Tokenization: ✅
+    - Stemming: ✅ (Built-in Porter)
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Finnish" icon="language">
+    **Code:** `fi` / `finnish`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="French" icon="language">
+    **Code:** `fr` / `french`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="German" icon="language">
+    **Code:** `de` / `german`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Greek" icon="language">
+    **Code:** `gr` / `greek`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Hungarian" icon="language">
+    **Code:** `hu` / `hungarian`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Indian (Hindi)" icon="language">
+    **Code:** `in` / `indian`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Indonesian" icon="language">
+    **Code:** `id` / `indonesian`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Irish" icon="language">
+    **Code:** `ie` / `irish`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Italian" icon="language">
+    **Code:** `it` / `italian`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Japanese" icon="language">
+    **Code:** `ja` / `japanese`
+    
+    - Tokenization: ✅ (Intl.Segmenter)
+    - Stemming: ❌ (Not applicable)
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Lithuanian" icon="language">
+    **Code:** `lt` / `lithuanian`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Nepali" icon="language">
+    **Code:** `np` / `nepali`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Norwegian" icon="language">
+    **Code:** `no` / `norwegian`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Portuguese" icon="language">
+    **Code:** `pt` / `portuguese`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Romanian" icon="language">
+    **Code:** `ro` / `romanian`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Russian" icon="language">
+    **Code:** `ru` / `russian`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Sanskrit" icon="language">
+    **Code:** `sk` / `sanskrit`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Serbian" icon="language">
+    **Code:** `rs` / `serbian`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Slovenian" icon="language">
+    **Code:** `ru` / `slovenian`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Spanish" icon="language">
+    **Code:** `es` / `spanish`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Swedish" icon="language">
+    **Code:** `se` / `swedish`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Tamil" icon="language">
+    **Code:** `ta` / `tamil`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Turkish" icon="language">
+    **Code:** `tr` / `turkish`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+  
+  <Card title="Ukrainian" icon="language">
+    **Code:** `uk` / `ukrainian`
+    
+    - Tokenization: ✅
+    - Stemming: ✅
+    - Stopwords: ✅
+  </Card>
+</CardGroup>
+
+## Quick Start by Language
+
+### Western European Languages
+
+<CodeGroup>
+```typescript English (Default)
+import { create } from '@orama/orama'
+
+// English is the default language
+const db = await create({
+  schema: { content: 'string' },
+  components: {
+    tokenizer: {
+      language: 'english',
+      stemming: true  // Built-in Porter stemmer
+    }
+  }
+})
+```
+
+```typescript French
+import { create } from '@orama/orama'
+import { stemmer, language } from '@orama/stemmers/french'
+import { stopwords } from '@orama/stopwords/french'
+
+const db = await create({
+  schema: { content: 'string' },
+  components: {
+    tokenizer: {
+      language,
+      stemmer,
+      stemming: true,
+      stopWords: stopwords
+    }
+  }
+})
+```
+
+```typescript German
+import { create } from '@orama/orama'
+import { stemmer, language } from '@orama/stemmers/german'
+import { stopwords } from '@orama/stopwords/german'
+
+const db = await create({
+  schema: { content: 'string' },
+  components: {
+    tokenizer: {
+      language,
+      stemmer,
+      stemming: true,
+      stopWords: stopwords
+    }
+  }
+})
+```
+
+```typescript Spanish
+import { create } from '@orama/orama'
+import { stemmer, language } from '@orama/stemmers/spanish'
+import { stopwords } from '@orama/stopwords/spanish'
+
+const db = await create({
+  schema: { content: 'string' },
+  components: {
+    tokenizer: {
+      language,
+      stemmer,
+      stemming: true,
+      stopWords: stopwords
+    }
+  }
+})
+```
+
+```typescript Italian
+import { create } from '@orama/orama'
+import { stemmer, language } from '@orama/stemmers/italian'
+import { stopwords } from '@orama/stopwords/italian'
+
+const db = await create({
+  schema: { content: 'string' },
+  components: {
+    tokenizer: {
+      language,
+      stemmer,
+      stemming: true,
+      stopWords: stopwords
+    }
+  }
+})
+```
+
+```typescript Portuguese
+import { create } from '@orama/orama'
+import { stemmer, language } from '@orama/stemmers/portuguese'
+import { stopwords } from '@orama/stopwords/portuguese'
+
+const db = await create({
+  schema: { content: 'string' },
+  components: {
+    tokenizer: {
+      language,
+      stemmer,
+      stemming: true,
+      stopWords: stopwords
+    }
+  }
+})
+```
+</CodeGroup>
+
+### Asian Languages
+
+<CodeGroup>
+```typescript Chinese (Mandarin)
+import { create } from '@orama/orama'
+import { createTokenizer } from '@orama/tokenizers/mandarin'
+import { stopwords } from '@orama/stopwords/chinese'
+
+const db = await create({
+  schema: { content: 'string' },
+  components: {
+    tokenizer: await createTokenizer({
+      language: 'mandarin',
+      stopWords: stopwords
+    })
+  }
+})
+
+// Uses Intl.Segmenter for word boundary detection
+await insert(db, {
+  content: '我爱编程' // "I love programming"
+})
+```
+
+```typescript Japanese
+import { create } from '@orama/orama'
+import { createTokenizer } from '@orama/tokenizers/japanese'
+import { stopwords } from '@orama/stopwords/japanese'
+
+const db = await create({
+  schema: { content: 'string' },
+  components: {
+    tokenizer: await createTokenizer({
+      language: 'japanese',
+      stopWords: stopwords
+    })
+  }
+})
+
+// Uses Intl.Segmenter for word boundary detection
+await insert(db, {
+  content: 'プログラミングが好きです' // "I like programming"
+})
+```
+</CodeGroup>
+
+<Note>
+Chinese and Japanese use `Intl.Segmenter` for tokenization instead of regex patterns. This provides more accurate word boundary detection for languages without spaces.
+</Note>
+
+### Slavic Languages
+
+<CodeGroup>
+```typescript Russian
+import { create } from '@orama/orama'
+import { stemmer, language } from '@orama/stemmers/russian'
+import { stopwords } from '@orama/stopwords/russian'
+
+const db = await create({
+  schema: { content: 'string' },
+  components: {
+    tokenizer: {
+      language,
+      stemmer,
+      stemming: true,
+      stopWords: stopwords
+    }
+  }
+})
+```
+
+```typescript Ukrainian
+import { create } from '@orama/orama'
+import { stemmer, language } from '@orama/stemmers/ukrainian'
+import { stopwords } from '@orama/stopwords/ukrainian'
+
+const db = await create({
+  schema: { content: 'string' },
+  components: {
+    tokenizer: {
+      language,
+      stemmer,
+      stemming: true,
+      stopWords: stopwords
+    }
+  }
+})
+```
+
+```typescript Bulgarian
+import { create } from '@orama/orama'
+import { stemmer, language } from '@orama/stemmers/bulgarian'
+import { stopwords } from '@orama/stopwords/bulgarian'
+
+const db = await create({
+  schema: { content: 'string' },
+  components: {
+    tokenizer: {
+      language,
+      stemmer,
+      stemming: true,
+      stopWords: stopwords
+    }
+  }
+})
+```
+</CodeGroup>
+
+## Language-Specific Tokenization Rules
+
+Each language has specialized regex patterns that preserve language-specific characters:
+
+<Tabs>
+  <Tab title="French">
+    ```typescript
+    // Pattern: /[^a-z0-9äâàéèëêïîöôùüûœç-]+/gim
+    
+    // Preserves:
+    // - Accented characters: é, è, ê, à, â, ù, û, ô, ö, etc.
+    // - Ligatures: œ
+    // - Cedilla: ç
+    
+    tokenize("L'été est très beau à Montréal")
+    // Result: ["l'été", "est", "très", "beau", "à", "montréal"]
+    ```
+  </Tab>
+  
+  <Tab title="German">
+    ```typescript
+    // Pattern: /[^a-z0-9A-ZäöüÄÖÜß]+/gim
+    
+    // Preserves:
+    // - Umlauts: ä, ö, ü, Ä, Ö, Ü
+    // - Eszett: ß
+    
+    tokenize("Die Straße ist groß und schön")
+    // Result: ["die", "straße", "ist", "groß", "und", "schön"]
+    ```
+  </Tab>
+  
+  <Tab title="Russian">
+    ```typescript
+    // Pattern: /[^a-z0-9а-яА-ЯёЁ]+/gim
+    
+    // Preserves:
+    // - Cyrillic alphabet: а-я, А-Я
+    // - Yo character: ё, Ё
+    
+    tokenize("Программирование это интересно")
+    // Result: ["программирование", "это", "интересно"]
+    ```
+  </Tab>
+  
+  <Tab title="Turkish">
+    ```typescript
+    // Pattern: /[^a-z0-9çÇğĞıİöÖşŞüÜ]+/gim
+    
+    // Preserves:
+    // - Special characters: ç, ğ, ı, İ, ö, ş, ü
+    // - Both cases: lowercase and uppercase
+    
+    tokenize("Merhaba dünya, nasılsın?")
+    // Result: ["merhaba", "dünya", "nasılsın"]
+    ```
+  </Tab>
+  
+  <Tab title="Arabic">
+    ```typescript
+    // Pattern: /[^a-z0-9أ-ي]+/gim
+    
+    // Preserves:
+    // - Arabic alphabet: أ-ي
+    // - Includes special forms and diacritics
+    
+    tokenize("مرحبا بك في عالم البرمجة")
+    // Result: ["مرحبا", "بك", "في", "عالم", "البرمجة"]
+    ```
+  </Tab>
+</Tabs>
+
+## Multi-Language Applications
+
+For applications supporting multiple languages, create separate Orama instances:
+
+```typescript
+import { create } from '@orama/orama'
+import { stemmer as enStemmer } from '@orama/stemmers/english'
+import { stemmer as frStemmer, language as frLang } from '@orama/stemmers/french'
+import { stemmer as deStemmer, language as deLang } from '@orama/stemmers/german'
+import { stopwords as enStopwords } from '@orama/stopwords/english'
+import { stopwords as frStopwords } from '@orama/stopwords/french'
+import { stopwords as deStopwords } from '@orama/stopwords/german'
+
+const databases = {
+  en: await create({
+    schema: { title: 'string', content: 'string' },
+    components: {
+      tokenizer: {
+        language: 'english',
+        stemming: true,
+        stopWords: enStopwords
+      }
+    }
+  }),
+  
+  fr: await create({
+    schema: { title: 'string', content: 'string' },
+    components: {
+      tokenizer: {
+        language: frLang,
+        stemmer: frStemmer,
+        stemming: true,
+        stopWords: frStopwords
+      }
+    }
+  }),
+  
+  de: await create({
+    schema: { title: 'string', content: 'string' },
+    components: {
+      tokenizer: {
+        language: deLang,
+        stemmer: deStemmer,
+        stemming: true,
+        stopWords: deStopwords
+      }
+    }
+  })
+}
+
+// Search in the appropriate database
+function search(lang: 'en' | 'fr' | 'de', query: string) {
+  return databases[lang].search({ term: query })
+}
+
+// Insert into language-specific database
+async function addDocument(lang: 'en' | 'fr' | 'de', doc: any) {
+  await insert(databases[lang], doc)
+}
+```
+
+## Language Detection
+
+Orama doesn't include automatic language detection. Consider using a library like `franc` or `cld` for language detection:
+
+```typescript
+import { franc } from 'franc'
+import { create, insert } from '@orama/orama'
+
+// Map franc language codes to Orama language names
+const langMap = {
+  eng: 'english',
+  fra: 'french',
+  deu: 'german',
+  spa: 'spanish',
+  ita: 'italian',
+  // ... add more mappings
+}
+
+async function addDocumentWithDetection(text: string) {
+  const detectedLang = franc(text)
+  const oramaLang = langMap[detectedLang] || 'english'
+  
+  // Use appropriate database for detected language
+  await insert(databases[oramaLang], { content: text })
+}
+```
+
+## Package Structure
+
+### @orama/orama
+Core package with built-in English support:
+- English tokenization
+- English Porter stemmer
+- No default stopwords (must be imported)
+
+### @orama/stemmers
+Language-specific stemmers (30 languages):
+```typescript
+import { stemmer, language } from '@orama/stemmers/[language]'
+```
+
+### @orama/stopwords
+Language-specific stopword lists (30 languages):
+```typescript
+import { stopwords } from '@orama/stopwords/[language]'
+```
+
+### @orama/tokenizers
+Specialized tokenizers for Asian languages:
+- Chinese (Mandarin)
+- Japanese
+
+```typescript
+import { createTokenizer } from '@orama/tokenizers/[language]'
+```
+
+## Installation
+
+<CodeGroup>
+```bash Core Only (English)
+npm install @orama/orama
+```
+
+```bash With Stemmers
+npm install @orama/orama @orama/stemmers
+```
+
+```bash With Stopwords
+npm install @orama/orama @orama/stopwords
+```
+
+```bash Complete Setup
+npm install @orama/orama @orama/stemmers @orama/stopwords
+```
+
+```bash Asian Languages
+npm install @orama/orama @orama/tokenizers @orama/stopwords
+```
+</CodeGroup>
+
+## Performance by Language
+
+<AccordionGroup>
+  <Accordion title="Latin-Based Languages" icon="gauge">
+    **English, French, German, Spanish, Italian, Portuguese, Romanian**
+    
+    - Tokenization: Very fast (regex-based)
+    - Stemming: Fast (optimized algorithms)
+    - Memory: Standard
+    
+    Best performance due to simple character sets and well-optimized algorithms.
+  </Accordion>
+  
+  <Accordion title="Cyrillic Languages" icon="gauge">
+    **Russian, Ukrainian, Bulgarian, Serbian**
+    
+    - Tokenization: Very fast (regex-based)
+    - Stemming: Fast
+    - Memory: Standard
+    
+    Similar performance to Latin-based languages.
+  </Accordion>
+  
+  <Accordion title="Asian Languages" icon="gauge">
+    **Chinese (Mandarin), Japanese**
+    
+    - Tokenization: Moderate (Intl.Segmenter)
+    - Stemming: N/A
+    - Memory: Higher (more complex characters)
+    
+    Slightly slower tokenization due to `Intl.Segmenter`, but still performant for most use cases.
+  </Accordion>
+  
+  <Accordion title="Complex Scripts" icon="gauge">
+    **Arabic, Tamil, Nepali, Sanskrit**
+    
+    - Tokenization: Fast (regex-based)
+    - Stemming: Fast
+    - Memory: Standard to Higher
+    
+    Performance comparable to Latin languages, though character encoding may use slightly more memory.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Language Not Supported Error" icon="circle-exclamation">
+    ```typescript
+    // Error: LANGUAGE_NOT_SUPPORTED
+    
+    // Make sure the language string matches exactly:
+    language: 'english'  // ✅ Correct
+    language: 'en'       // ❌ Wrong - use full name
+    language: 'English'  // ❌ Wrong - lowercase only
+    ```
+  </Accordion>
+  
+  <Accordion title="Missing Stemmer Error" icon="circle-exclamation">
+    ```typescript
+    // Error: MISSING_STEMMER
+    
+    // For non-English languages, import the stemmer:
+    import { stemmer, language } from '@orama/stemmers/french'
+    
+    components: {
+      tokenizer: {
+        language,      // ✅ Required
+        stemmer,       // ✅ Required
+        stemming: true // ✅ Required
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Special Characters Lost" icon="circle-exclamation">
+    ```typescript
+    // Characters disappearing after tokenization?
+    // Ensure you're using the correct language:
+    
+    // ❌ Wrong: German text with English tokenizer
+    language: 'english'
+    // "Schöne Straße" → ["sch", "ne", "stra", "e"]
+    
+    // ✅ Correct: German text with German tokenizer
+    language: 'german'
+    // "Schöne Straße" → ["schöne", "straße"]
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Tokenization" icon="text" href="/text-analysis/tokenization">
+    Deep dive into how tokenization works
+  </Card>
+  <Card title="Stemming" icon="scissors" href="/text-analysis/stemming">
+    Learn about stemming algorithms
+  </Card>
+  <Card title="Stopwords" icon="filter" href="/text-analysis/stopwords">
+    Configure stopword filtering
+  </Card>
+  <Card title="Search" icon="magnifying-glass" href="/open-source/usage/search">
+    Use language features in search
+  </Card>
+</CardGroup>

@@ -1,0 +1,245 @@
+---
+title: updateMultiple()
+description: Update multiple existing documents in an Orama database instance
+---
+
+Updates multiple existing documents in the Orama database in batches. This method is more efficient than calling `update()` multiple times.
+
+## Function Signature
+
+```typescript
+function updateMultiple<T extends AnyOrama>(
+  orama: T,
+  ids: string[],
+  docs: PartialSchemaDeep<TypedDocument<T>>[],
+  batchSize?: number,
+  language?: string,
+  skipHooks?: boolean
+): Promise<string[]> | string[]
+```
+
+## Parameters
+
+<ParamField path="orama" type="Orama" required>
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="ids" type="string[]" required>
+  Array of document IDs to update. Must correspond to the documents array.
+</ParamField>
+
+<ParamField path="docs" type="PartialSchemaDeep<TypedDocument<T>>[]" required>
+  Array of new document data. Must match the database schema structure. Each document at index `i` replaces the document with ID at `ids[i]`.
+</ParamField>
+
+<ParamField path="batchSize" type="number" default="1000">
+  Number of documents to process in each batch.
+</ParamField>
+
+<ParamField path="language" type="string">
+  Optional language for tokenization when re-indexing documents.
+</ParamField>
+
+<ParamField path="skipHooks" type="boolean" default="false">
+  If true, skips executing update, insert, remove, and multiple operation hooks.
+</ParamField>
+
+## Returns
+
+<ResponseField name="ids" type="string[] | Promise<string[]>">
+  Array of IDs for the updated documents. Returns a Promise if async operations are required.
+</ResponseField>
+
+## Behavior
+
+- Triggers `beforeUpdateMultiple` hook (if not skipped)
+- Validates all documents against the schema before processing
+- Removes all existing documents using `removeMultiple()`
+- Inserts all new documents using `innerInsertMultiple()`
+- Triggers `afterUpdateMultiple` hook with the new document IDs (if not skipped)
+- Processes documents in batches for optimal performance
+
+## Examples
+
+### Basic Batch Update
+
+```typescript
+import { create, insertMultiple, updateMultiple } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    price: 'number',
+    inStock: 'boolean'
+  }
+})
+
+// Insert initial products
+await insertMultiple(db, [
+  { id: 'p1', title: 'Laptop', price: 999, inStock: true },
+  { id: 'p2', title: 'Mouse', price: 29, inStock: true },
+  { id: 'p3', title: 'Keyboard', price: 79, inStock: true }
+])
+
+// Update prices for all products
+const ids = ['p1', 'p2', 'p3']
+const updatedDocs = [
+  { id: 'p1', title: 'Laptop', price: 899, inStock: true },
+  { id: 'p2', title: 'Mouse', price: 24.99, inStock: true },
+  { id: 'p3', title: 'Keyboard', price: 69.99, inStock: true }
+]
+
+const newIds = await updateMultiple(db, ids, updatedDocs)
+console.log(newIds) // ['p1', 'p2', 'p3']
+```
+
+### Bulk Stock Status Update
+
+```typescript
+const markAsOutOfStock = async (productIds: string[]) => {
+  // Get current documents
+  const currentDocs = productIds.map(id => getByID(db, id))
+  
+  // Update stock status
+  const updatedDocs = currentDocs.map(doc => ({
+    ...doc,
+    inStock: false
+  }))
+  
+  return await updateMultiple(db, productIds, updatedDocs)
+}
+
+await markAsOutOfStock(['p1', 'p2', 'p3'])
+```
+
+### Apply Discount to Multiple Products
+
+```typescript
+const applyDiscount = async (
+  productIds: string[],
+  discountPercent: number
+) => {
+  const docs = productIds.map(id => getByID(db, id))
+  
+  const discountedDocs = docs.map(doc => ({
+    ...doc,
+    price: doc.price * (1 - discountPercent / 100)
+  }))
+  
+  return await updateMultiple(db, productIds, discountedDocs)
+}
+
+// Apply 20% discount
+await applyDiscount(['p1', 'p2', 'p3'], 20)
+```
+
+### Update with Timestamp
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    content: 'string',
+    updatedAt: 'string'
+  }
+})
+
+const updateArticles = async (
+  articleIds: string[],
+  updates: Record<string, Partial<any>>
+) => {
+  const docs = articleIds.map(id => {
+    const current = getByID(db, id)
+    return {
+      ...current,
+      ...updates[id],
+      updatedAt: new Date().toISOString()
+    }
+  })
+  
+  return await updateMultiple(db, articleIds, docs)
+}
+
+await updateArticles(['art-1', 'art-2'], {
+  'art-1': { title: 'New Title 1' },
+  'art-2': { title: 'New Title 2' }
+})
+```
+
+### Update with Custom Batch Size
+
+```typescript
+// Update 500 documents at a time
+const largeUpdateSet = Array.from({ length: 5000 }, (_, i) => ({
+  id: `doc-${i}`,
+  title: `Updated Document ${i}`,
+  content: `Updated content ${i}`
+}))
+
+const ids = largeUpdateSet.map(doc => doc.id)
+
+const newIds = await updateMultiple(
+  db,
+  ids,
+  largeUpdateSet,
+  500 // Custom batch size
+)
+```
+
+### Conditional Bulk Update
+
+```typescript
+const updateExpensiveItems = async (minPrice: number) => {
+  // Search for expensive items
+  const results = await search(db, {
+    term: '',
+    where: {
+      price: { gte: minPrice }
+    }
+  })
+  
+  const ids = results.hits.map(hit => hit.id)
+  const docs = results.hits.map(hit => ({
+    ...hit.document,
+    price: hit.document.price * 0.9, // 10% discount
+    onSale: true
+  }))
+  
+  return await updateMultiple(db, ids, docs)
+}
+
+await updateExpensiveItems(500)
+```
+
+## Important Notes
+
+- The `ids` and `docs` arrays must have the same length and corresponding indices
+- All specified IDs must exist in the database, or the operation will fail
+- For insert-or-update behavior, use [`upsertMultiple()`](/api/upsert-multiple) instead
+- All documents are validated before any updates occur
+- The operation uses remove-then-insert strategy for each document
+- Consider using larger batch sizes for better performance with large datasets
+
+## Error Handling
+
+```typescript
+try {
+  const ids = await updateMultiple(db, ['p1', 'p2'], updatedDocs)
+  console.log('Updated:', ids)
+} catch (error) {
+  if (error.message.includes('SCHEMA_VALIDATION_FAILURE')) {
+    console.error('One or more documents failed schema validation')
+  } else {
+    console.error('Update failed:', error)
+  }
+}
+```
+
+## See Also
+
+- [update()](/api/update) - Update a single document
+- [upsertMultiple()](/api/upsert-multiple) - Insert or update multiple documents
+- [insertMultiple()](/api/insert-multiple) - Insert multiple documents
+- [removeMultiple()](/api/remove-multiple) - Remove multiple documents

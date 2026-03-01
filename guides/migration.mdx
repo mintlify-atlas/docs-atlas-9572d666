@@ -1,0 +1,557 @@
+---
+title: 'Migration Guide'
+description: 'Migrate between Orama versions and upgrade your search implementation'
+icon: 'arrow-right-arrow-left'
+---
+
+Guide for migrating between major versions of Orama and updating your search implementation.
+
+## Current Version: 3.1.x
+
+Orama follows semantic versioning. This guide covers migrations between major versions and breaking changes.
+
+<Info>
+**Latest Version**: @orama/orama@3.1.18
+
+Check your current version: `npm list @orama/orama`
+</Info>
+
+## Migrating to v3.x from v2.x
+
+### Breaking Changes Overview
+
+Version 3.0 introduced several significant changes:
+
+<CardGroup cols={2}>
+  <Card title="Answer Engine" icon="comments">
+    New RAG and chat session capabilities with OpenAI integration
+  </Card>
+  <Card title="API Changes" icon="code">
+    Simplified API surface with better TypeScript support
+  </Card>
+  <Card title="Plugin System" icon="puzzle-piece">
+    Enhanced plugin architecture with new hooks
+  </Card>
+  <Card title="Performance" icon="bolt">
+    Optimized indexing with better batch processing
+  </Card>
+</CardGroup>
+
+### Installation Update
+
+<Steps>
+  <Step title="Update package version">
+    ```bash
+    npm install @orama/orama@latest
+    ```
+  </Step>
+  
+  <Step title="Update imports">
+    ```javascript
+    // v2.x
+    import { create, insert, search } from '@orama/orama'
+    
+    // v3.x - Same imports, enhanced types
+    import { create, insert, search } from '@orama/orama'
+    ```
+  </Step>
+  
+  <Step title="Check plugin compatibility">
+    ```bash
+    # Update all Orama plugins
+    npm install @orama/plugin-embeddings@latest
+    npm install @orama/plugin-secure-proxy@latest
+    ```
+  </Step>
+</Steps>
+
+### API Changes
+
+#### Database Creation
+
+```javascript
+// v2.x - Still works in v3.x
+const db = await create({
+  schema: {
+    title: 'string',
+    content: 'string'
+  }
+})
+
+// v3.x - Enhanced with better types
+const db = await create({
+  schema: {
+    title: 'string',
+    content: 'string',
+    embedding: 'vector[512]'  // Better vector support
+  },
+  plugins: [secureProxyPlugin]  // Enhanced plugin system
+})
+```
+
+<Info>
+The core API remains backward compatible. Most v2.x code works without changes.
+</Info>
+
+#### Search Mode Changes
+
+```javascript
+// v2.x - Mode was optional
+const results = await search(db, {
+  term: 'query'
+})
+
+// v3.x - Explicit modes for better clarity
+const fullTextResults = await search(db, {
+  mode: 'fulltext',  // Default, can be omitted
+  term: 'query'
+})
+
+const vectorResults = await search(db, {
+  mode: 'vector',
+  vector: {
+    value: embedding,
+    property: 'embedding'
+  }
+})
+
+const hybridResults = await search(db, {
+  mode: 'hybrid',
+  term: 'query',
+  vector: {
+    value: embedding,
+    property: 'embedding'
+  }
+})
+```
+
+### New Features in v3.x
+
+#### Answer Sessions (RAG)
+
+```javascript
+import { create, insertMultiple, AnswerSession } from '@orama/orama'
+import { pluginSecureProxy } from '@orama/plugin-secure-proxy'
+
+const secureProxy = await pluginSecureProxy({
+  apiKey: 'my-api-key',
+  defaultProperty: 'embeddings',
+  models: {
+    chat: 'openai/gpt-4o-mini'
+  }
+})
+
+const db = await create({
+  schema: {
+    name: 'string',
+    content: 'string'
+  },
+  plugins: [secureProxy]
+})
+
+await insertMultiple(db, documents)
+
+// NEW in v3.x: RAG chat sessions
+const session = new AnswerSession(db, {
+  systemPrompt: 'You are a helpful assistant',
+  events: {
+    onStateChange: (state) => console.log('State:', state)
+  }
+})
+
+const answer = await session.ask({ term: 'What is Orama?' })
+console.log(answer)
+```
+
+<Tip>
+Answer Sessions enable ChatGPT-like experiences with your own data. See [Answer Engine documentation](/answer-engine) for details.
+</Tip>
+
+#### Enhanced Plugin Hooks
+
+```javascript
+// v3.x - More plugin hooks available
+const plugin = {
+  name: 'my-plugin',
+  // New hooks in v3.x
+  beforeInsert: async (orama, id, doc) => { },
+  afterInsert: async (orama, id, doc) => { },
+  afterInsertMultiple: async (orama, docs) => { },  // NEW
+  beforeSearch: async (orama, params) => { },
+  afterSearch: async (orama, results) => { },
+  getComponents: (schema) => ({ })  // NEW
+}
+```
+
+### TypeScript Improvements
+
+```typescript
+// v3.x - Better type inference
+import { create, type TypedDocument } from '@orama/orama'
+
+type Schema = {
+  id: 'string'
+  title: 'string'
+  price: 'number'
+}
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    price: 'number'
+  } satisfies Schema
+})
+
+// TypeScript now infers the correct document type
+const results = await search(db, { term: 'laptop' })
+results.hits.forEach(hit => {
+  // Fully typed!
+  console.log(hit.document.title)  // string
+  console.log(hit.document.price)  // number
+})
+```
+
+## Migrating Data Between Versions
+
+### Export from v2.x
+
+```javascript
+// v2.x - Export your data
+import { save } from '@orama/orama'
+
+const serialized = await save(db)
+await fs.writeFile('orama-v2-export.json', JSON.stringify(serialized))
+```
+
+### Import to v3.x
+
+```javascript
+// v3.x - Import your data
+import { create, load } from '@orama/orama'
+import fs from 'fs/promises'
+
+// Create new v3.x database with same schema
+const db = await create({
+  schema: { /* same schema as v2.x */ }
+})
+
+// Load v2.x data
+const data = JSON.parse(await fs.readFile('orama-v2-export.json', 'utf-8'))
+load(db, data)
+
+console.log('Migration complete!')
+```
+
+<Warning>
+**Schema Compatibility**: The schema structure must match between versions. If you change your schema, you'll need to re-index your documents.
+</Warning>
+
+## Version Compatibility Matrix
+
+| Package | v2.x | v3.0 | v3.1+ |
+|---------|------|------|-------|
+| @orama/orama | 2.x | 3.0.x | 3.1.x |
+| @orama/plugin-embeddings | 1.x | 2.0.x | 2.1.x |
+| @orama/plugin-secure-proxy | - | 1.0.x | 1.1.x |
+| @orama/plugin-analytics | 1.x | 2.0.x | 2.1.x |
+| @orama/plugin-data-persistence | 1.x | 2.0.x | 2.1.x |
+
+<Info>
+Plugin versions are synchronized with core Orama major versions. Update all packages together.
+</Info>
+
+## Plugin Migration
+
+### Data Persistence Plugin
+
+```javascript
+// v2.x
+import { persistToLocalStorage } from '@orama/plugin-data-persistence'
+
+// v3.x - Enhanced with more storage options
+import { pluginPersistence } from '@orama/plugin-data-persistence'
+
+const db = await create({
+  schema: { /* ... */ },
+  plugins: [
+    pluginPersistence({
+      storage: 'localStorage',  // or 'indexedDB', 'fileSystem'
+      key: 'my-search-db'
+    })
+  ]
+})
+```
+
+### Embeddings Plugin
+
+```javascript
+// v2.x
+import { pluginEmbeddings } from '@orama/plugin-embeddings'
+
+// v3.x - Same API, better performance
+const plugin = await pluginEmbeddings({
+  embeddings: {
+    defaultProperty: 'embeddings',
+    onInsert: {
+      generate: true,
+      properties: ['description'],
+      verbose: true
+    }
+  }
+})
+```
+
+## Common Migration Issues
+
+<Accordion title="Error: Module not found after upgrading">
+```bash
+# Clear node_modules and reinstall
+rm -rf node_modules package-lock.json
+npm install
+
+# Or with yarn
+rm -rf node_modules yarn.lock
+yarn install
+```
+</Accordion>
+
+<Accordion title="TypeScript errors after upgrade">
+```bash
+# Update TypeScript and regenerate types
+npm install typescript@latest --save-dev
+npx tsc --build --clean
+npx tsc --build
+
+# Update your tsconfig.json
+{
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+    "target": "ES2020",
+    "lib": ["ES2020"]
+  }
+}
+```
+</Accordion>
+
+<Accordion title="Serialized data not loading">
+```javascript
+// Check version compatibility
+import { create, load } from '@orama/orama'
+
+try {
+  const db = await create({ schema })
+  load(db, oldData)
+} catch (error) {
+  console.error('Migration error:', error)
+  // Fallback: Re-index from source data
+  await insertMultiple(db, originalDocuments)
+}
+```
+</Accordion>
+
+<Accordion title="Plugin compatibility issues">
+```javascript
+// Ensure all plugins are compatible
+import { create } from '@orama/orama'
+import pkg from '@orama/orama/package.json'
+
+console.log('Orama version:', pkg.version)
+
+// Check plugin versions
+import pluginPkg from '@orama/plugin-embeddings/package.json'
+console.log('Plugin version:', pluginPkg.version)
+
+// Major versions should match
+```
+</Accordion>
+
+## Testing Your Migration
+
+```javascript
+import { create, insertMultiple, search, save, load } from '@orama/orama'
+import assert from 'assert'
+
+async function testMigration() {
+  // Create test database
+  const db = await create({
+    schema: {
+      id: 'string',
+      title: 'string',
+      content: 'string'
+    }
+  })
+  
+  // Insert test data
+  const testDocs = [
+    { id: '1', title: 'Test 1', content: 'Content 1' },
+    { id: '2', title: 'Test 2', content: 'Content 2' }
+  ]
+  await insertMultiple(db, testDocs)
+  
+  // Test search
+  const results = await search(db, { term: 'test' })
+  assert.equal(results.count, 2, 'Should find 2 results')
+  
+  // Test serialization
+  const serialized = await save(db)
+  assert(serialized.index, 'Should have index data')
+  assert(serialized.docs, 'Should have document data')
+  
+  // Test deserialization
+  const db2 = await create({ schema: db.schema })
+  load(db2, serialized)
+  const results2 = await search(db2, { term: 'test' })
+  assert.equal(results2.count, 2, 'Loaded DB should have same results')
+  
+  console.log('✅ Migration tests passed!')
+}
+
+testMigration().catch(console.error)
+```
+
+## Rollback Strategy
+
+If you encounter issues:
+
+<Steps>
+  <Step title="Keep v2.x backup">
+    ```bash
+    # Before upgrading
+    npm list @orama/orama > orama-version-backup.txt
+    cp package.json package.json.backup
+    ```
+  </Step>
+  
+  <Step title="Test in isolated environment">
+    ```bash
+    # Create test branch
+    git checkout -b test-orama-v3
+    npm install @orama/orama@latest
+    # Run your test suite
+    npm test
+    ```
+  </Step>
+  
+  <Step title="Rollback if needed">
+    ```bash
+    # Restore old version
+    cp package.json.backup package.json
+    npm install
+    ```
+  </Step>
+</Steps>
+
+## Best Practices for Migration
+
+<CardGroup cols={2}>
+  <Card title="Test First" icon="flask">
+    Test the migration in a development environment before production
+  </Card>
+  <Card title="Backup Data" icon="cloud-arrow-down">
+    Export your current database before upgrading
+  </Card>
+  <Card title="Update Dependencies" icon="arrows-rotate">
+    Update all Orama packages simultaneously
+  </Card>
+  <Card title="Gradual Rollout" icon="chart-line">
+    Deploy to staging first, monitor metrics
+  </Card>
+</CardGroup>
+
+## Performance Comparison
+
+Benchmark your performance before and after migration:
+
+```javascript
+import { performance } from 'perf_hooks'
+
+async function benchmark(db, queries) {
+  const times = []
+  
+  for (const query of queries) {
+    const start = performance.now()
+    await search(db, { term: query, limit: 20 })
+    times.push(performance.now() - start)
+  }
+  
+  const avg = times.reduce((a, b) => a + b) / times.length
+  console.log(`Average search time: ${avg.toFixed(2)}ms`)
+  return avg
+}
+
+// Compare v2 vs v3
+const v2Time = await benchmark(dbV2, testQueries)
+const v3Time = await benchmark(dbV3, testQueries)
+console.log(`Performance change: ${((v3Time - v2Time) / v2Time * 100).toFixed(1)}%`)
+```
+
+## Getting Help
+
+If you encounter migration issues:
+
+<CardGroup cols={2}>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/oramasearch/orama/issues">
+    Report bugs and migration problems
+  </Card>
+  <Card title="Slack Community" icon="slack" href="https://orama.to/slack">
+    Get help from the community
+  </Card>
+  <Card title="Documentation" icon="book" href="https://docs.orama.com">
+    Check the latest docs
+  </Card>
+  <Card title="Changelog" icon="list" href="https://github.com/oramasearch/orama/releases">
+    Review detailed release notes
+  </Card>
+</CardGroup>
+
+## Migration Checklist
+
+<Steps>
+  <Step title="Backup current database">
+    Export your data with `save()` before upgrading
+  </Step>
+  <Step title="Update packages">
+    ```bash
+    npm install @orama/orama@latest
+    ```
+  </Step>
+  <Step title="Update imports">
+    Check for any deprecated import paths
+  </Step>
+  <Step title="Update plugin versions">
+    Ensure all plugins match the core version
+  </Step>
+  <Step title="Run tests">
+    Execute your test suite in the new version
+  </Step>
+  <Step title="Benchmark performance">
+    Compare search performance metrics
+  </Step>
+  <Step title="Deploy to staging">
+    Test in staging environment first
+  </Step>
+  <Step title="Monitor metrics">
+    Watch for errors and performance regressions
+  </Step>
+  <Step title="Deploy to production">
+    Roll out gradually with monitoring
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="What's New in v3" icon="star" href="/whats-new">
+    Explore new features and improvements
+  </Card>
+  <Card title="Performance Guide" icon="gauge-high" href="/guides/performance-optimization">
+    Optimize your upgraded instance
+  </Card>
+  <Card title="Answer Engine" icon="comments" href="/answer-engine">
+    Try the new RAG capabilities
+  </Card>
+  <Card title="Plugin Guide" icon="puzzle-piece" href="/plugins/overview">
+    Update and configure plugins
+  </Card>
+</CardGroup>

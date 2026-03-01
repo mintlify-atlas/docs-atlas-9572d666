@@ -1,0 +1,768 @@
+---
+title: Building Chat Experiences
+description: Create interactive, ChatGPT-like interfaces with Orama's Answer Engine
+---
+
+# Building Chat Experiences
+
+Learn how to build production-ready chat interfaces with streaming responses, source attribution, and reactive state management using Orama's Answer Engine.
+
+## Complete Chat Implementation
+
+Here's a full example of a chat application with React:
+
+```typescript Chat.tsx
+import { useState, useEffect, useRef } from 'react'
+import { create, insert } from '@orama/orama'
+import { pluginSecureProxy } from '@orama/plugin-secure-proxy'
+import { AnswerSession } from '@orama/orama'
+import type { Interaction, Results } from '@orama/orama'
+
+interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  sources?: Results<any>
+  loading?: boolean
+}
+
+export function ChatInterface() {
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const sessionRef = useRef<AnswerSession | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Initialize Orama and Answer Session
+  useEffect(() => {
+    async function init() {
+      const db = await create({
+        schema: {
+          title: 'string',
+          content: 'string',
+          url: 'string'
+        },
+        plugins: [
+          await pluginSecureProxy({
+            apiKey: process.env.NEXT_PUBLIC_ORAMA_API_KEY!,
+            models: {
+              chat: 'openai/gpt-4o-mini'
+            }
+          })
+        ]
+      })
+
+      // Insert your documentation or data
+      await insert(db, {
+        title: 'Getting Started with Orama',
+        content: 'Orama is a fast, batteries-included full-text search engine...',
+        url: '/docs/getting-started'
+      })
+      
+      await insert(db, {
+        title: 'Vector Search',
+        content: 'Vector search allows you to find semantically similar documents...',
+        url: '/docs/vector-search'
+      })
+
+      // Create Answer Session
+      const session = new AnswerSession(db, {
+        systemPrompt: `You are a helpful documentation assistant.
+          - Answer questions based on the provided documentation
+          - Be concise but thorough
+          - Include relevant code examples
+          - If you're unsure, acknowledge it`,
+        events: {
+          onStateChange: (state: Interaction[]) => {
+            const latest = state[state.length - 1]
+            
+            setMessages(prev => {
+              const updated = [...prev]
+              const lastMsg = updated[updated.length - 1]
+              
+              if (lastMsg && lastMsg.role === 'assistant') {
+                lastMsg.content = latest.response
+                lastMsg.sources = latest.sources || undefined
+                lastMsg.loading = latest.loading
+              }
+              
+              return updated
+            })
+            
+            setIsLoading(latest.loading)
+          }
+        }
+      })
+
+      sessionRef.current = session
+    }
+
+    init()
+  }, [])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!input.trim() || !sessionRef.current || isLoading) return
+
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: input.trim()
+    }
+
+    const assistantMessage: Message = {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: '',
+      loading: true
+    }
+
+    setMessages(prev => [...prev, userMessage, assistantMessage])
+    setInput('')
+    setIsLoading(true)
+
+    try {
+      // Use streaming for real-time updates
+      const stream = await sessionRef.current.askStream({
+        term: userMessage.content,
+        properties: ['title', 'content'],
+        limit: 5
+      })
+
+      // Stream automatically updates via onStateChange
+      for await (const chunk of stream) {
+        // Chunks are handled by the onStateChange event
+      }
+    } catch (error) {
+      console.error('Chat error:', error)
+      setMessages(prev => {
+        const updated = [...prev]
+        const lastMsg = updated[updated.length - 1]
+        if (lastMsg.role === 'assistant') {
+          lastMsg.content = 'Sorry, an error occurred. Please try again.'
+          lastMsg.loading = false
+        }
+        return updated
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleStop = () => {
+    sessionRef.current?.abortAnswer()
+  }
+
+  return (
+    <div className="chat-container">
+      <div className="messages">
+        {messages.map((message) => (
+          <div key={message.id} className={`message ${message.role}`}>
+            <div className="message-content">
+              {message.content}
+              {message.loading && <span className="loading-indicator">▊</span>}
+            </div>
+            
+            {message.sources && message.sources.hits.length > 0 && (
+              <div className="sources">
+                <h4>Sources:</h4>
+                <ul>
+                  {message.sources.hits.map((hit, idx) => (
+                    <li key={idx}>
+                      <a href={hit.document.url}>
+                        {hit.document.title}
+                      </a>
+                      <span className="score">
+                        (relevance: {(hit.score * 100).toFixed(0)}%)
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={handleSubmit} className="input-form">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Ask a question..."
+          disabled={isLoading}
+        />
+        {isLoading ? (
+          <button type="button" onClick={handleStop}>
+            Stop
+          </button>
+        ) : (
+          <button type="submit" disabled={!input.trim()}>
+            Send
+          </button>
+        )}
+      </form>
+    </div>
+  )
+}
+```
+
+## Streaming Responses
+
+Streaming provides a better user experience by showing responses as they're generated:
+
+### Basic Streaming
+
+```typescript
+const stream = await session.askStream({
+  term: 'What is vector search?'
+})
+
+for await (const chunk of stream) {
+  console.log(chunk) // Each token as it arrives
+}
+```
+
+### Streaming with State Management
+
+The `onStateChange` event is called with each new chunk:
+
+```typescript
+const session = new AnswerSession(db, {
+  events: {
+    onStateChange: (state) => {
+      const current = state[state.length - 1]
+      
+      // Update your UI progressively
+      updateUI({
+        message: current.response,  // Growing response text
+        isLoading: current.loading,
+        sources: current.sources
+      })
+    }
+  }
+})
+```
+
+### Vanilla JavaScript Example
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Orama Chat</title>
+</head>
+<body>
+  <div id="chat">
+    <div id="messages"></div>
+    <form id="chat-form">
+      <input id="input" type="text" placeholder="Ask a question..." />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+
+  <script type="module">
+    import { create, insert } from '@orama/orama'
+    import { pluginSecureProxy } from '@orama/plugin-secure-proxy'
+    import { AnswerSession } from '@orama/orama'
+
+    const messagesDiv = document.getElementById('messages')
+    const form = document.getElementById('chat-form')
+    const input = document.getElementById('input')
+
+    // Initialize
+    const db = await create({
+      schema: { title: 'string', content: 'string' },
+      plugins: [
+        await pluginSecureProxy({
+          apiKey: 'your-api-key',
+          models: { chat: 'openai/gpt-4o-mini' }
+        })
+      ]
+    })
+
+    await insert(db, {
+      title: 'Orama Docs',
+      content: 'Documentation content here...'
+    })
+
+    const session = new AnswerSession(db, {
+      systemPrompt: 'You are a helpful assistant.',
+      events: {
+        onStateChange: (state) => {
+          const latest = state[state.length - 1]
+          const assistantDiv = document.querySelector('.assistant:last-child')
+          
+          if (assistantDiv) {
+            assistantDiv.textContent = latest.response
+            
+            if (latest.loading) {
+              assistantDiv.classList.add('loading')
+            } else {
+              assistantDiv.classList.remove('loading')
+            }
+          }
+        }
+      }
+    })
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const query = input.value.trim()
+      if (!query) return
+
+      // Add user message
+      const userDiv = document.createElement('div')
+      userDiv.className = 'message user'
+      userDiv.textContent = query
+      messagesDiv.appendChild(userDiv)
+
+      // Add assistant message placeholder
+      const assistantDiv = document.createElement('div')
+      assistantDiv.className = 'message assistant loading'
+      messagesDiv.appendChild(assistantDiv)
+
+      input.value = ''
+
+      // Stream response
+      const stream = await session.askStream({ term: query })
+      for await (const chunk of stream) {
+        // Updates happen via onStateChange
+      }
+    })
+  </script>
+</body>
+</html>
+```
+
+## Source Attribution
+
+Show users which documents were used to generate responses:
+
+```typescript
+const session = new AnswerSession(db, {
+  events: {
+    onStateChange: (state) => {
+      const current = state[state.length - 1]
+      
+      if (current.sources) {
+        displaySources(current.sources.hits.map(hit => ({
+          title: hit.document.title,
+          url: hit.document.url,
+          score: hit.score,
+          excerpt: hit.document.content.substring(0, 200)
+        })))
+      }
+    }
+  }
+})
+
+function displaySources(sources) {
+  const sourcesHTML = sources
+    .map(source => `
+      <div class="source">
+        <a href="${source.url}">
+          <h4>${source.title}</h4>
+          <p>${source.excerpt}...</p>
+        </a>
+        <span class="relevance">${(source.score * 100).toFixed(0)}% relevant</span>
+      </div>
+    `)
+    .join('')
+  
+  document.getElementById('sources').innerHTML = sourcesHTML
+}
+```
+
+## Conversation Management
+
+### Persisting Conversations
+
+```typescript
+import { AnswerSession } from '@orama/orama'
+import type { Message } from '@orama/orama'
+
+class ConversationManager {
+  private storage: Storage
+
+  constructor() {
+    this.storage = window.localStorage
+  }
+
+  saveConversation(conversationId: string, messages: Message[]) {
+    this.storage.setItem(
+      `conversation:${conversationId}`,
+      JSON.stringify(messages)
+    )
+  }
+
+  loadConversation(conversationId: string): Message[] | null {
+    const data = this.storage.getItem(`conversation:${conversationId}`)
+    return data ? JSON.parse(data) : null
+  }
+
+  createSession(db: any, conversationId: string) {
+    const savedMessages = this.loadConversation(conversationId)
+
+    const session = new AnswerSession(db, {
+      conversationID: conversationId,
+      initialMessages: savedMessages || [],
+      events: {
+        onStateChange: (state) => {
+          // Auto-save on every state change
+          const messages = session.getMessages()
+          this.saveConversation(conversationId, messages)
+        }
+      }
+    })
+
+    return session
+  }
+
+  listConversations(): string[] {
+    const keys = Object.keys(this.storage)
+    return keys
+      .filter(key => key.startsWith('conversation:'))
+      .map(key => key.replace('conversation:', ''))
+  }
+
+  deleteConversation(conversationId: string) {
+    this.storage.removeItem(`conversation:${conversationId}`)
+  }
+}
+
+// Usage
+const manager = new ConversationManager()
+const session = manager.createSession(db, 'user-123-conv-1')
+
+// List all saved conversations
+const conversations = manager.listConversations()
+console.log('Saved conversations:', conversations)
+```
+
+### Managing Multiple Sessions
+
+```typescript
+class SessionManager {
+  private sessions = new Map<string, AnswerSession>()
+  private db: any
+
+  constructor(db: any) {
+    this.db = db
+  }
+
+  getOrCreateSession(userId: string, conversationId?: string): AnswerSession {
+    const id = conversationId || `${userId}-${Date.now()}`
+    
+    if (!this.sessions.has(id)) {
+      const session = new AnswerSession(this.db, {
+        conversationID: id,
+        systemPrompt: this.getSystemPromptForUser(userId),
+        userContext: this.getUserContext(userId)
+      })
+      
+      this.sessions.set(id, session)
+    }
+    
+    return this.sessions.get(id)!
+  }
+
+  clearSession(conversationId: string) {
+    const session = this.sessions.get(conversationId)
+    session?.clearSession()
+    this.sessions.delete(conversationId)
+  }
+
+  private getSystemPromptForUser(userId: string): string {
+    // Customize based on user
+    return 'You are a helpful assistant.'
+  }
+
+  private getUserContext(userId: string): object {
+    // Load user preferences, history, etc.
+    return { userId, preferences: {} }
+  }
+}
+```
+
+## Error Handling
+
+Handle errors gracefully to provide a good user experience:
+
+```typescript
+const session = new AnswerSession(db, {
+  events: {
+    onStateChange: (state) => {
+      const current = state[state.length - 1]
+      
+      if (current.error) {
+        handleError(current.errorMessage)
+      }
+      
+      if (current.aborted) {
+        showMessage('Response generation was cancelled')
+      }
+    }
+  }
+})
+
+function handleError(message: string | null) {
+  const errorMessages = {
+    'PLUGIN_SECURE_PROXY_NOT_FOUND': 
+      'Configuration error: Secure Proxy plugin not found',
+    'PLUGIN_SECURE_PROXY_MISSING_CHAT_MODEL': 
+      'Configuration error: No chat model specified',
+    'AbortError': 
+      'Request was cancelled'
+  }
+  
+  const userMessage = errorMessages[message] || 
+    'An unexpected error occurred. Please try again.'
+  
+  displayError(userMessage)
+  logError(message) // Log for debugging
+}
+
+async function askWithRetry(session: AnswerSession, query: string, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await session.ask({ term: query })
+    } catch (error) {
+      if (i === maxRetries - 1) throw error
+      
+      // Wait before retry (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000))
+    }
+  }
+}
+```
+
+## Advanced Features
+
+### Regenerating Responses
+
+Allow users to regenerate responses they're not satisfied with:
+
+```typescript
+function RegenerateButton({ session }: { session: AnswerSession }) {
+  const handleRegenerate = async () => {
+    try {
+      const stream = session.regenerateLast({ stream: true })
+      
+      for await (const chunk of stream) {
+        // Updates via onStateChange
+      }
+    } catch (error) {
+      if (error.message.includes('No messages')) {
+        alert('No messages to regenerate')
+      } else {
+        console.error('Regeneration failed:', error)
+      }
+    }
+  }
+
+  return (
+    <button onClick={handleRegenerate}>
+      🔄 Regenerate Response
+    </button>
+  )
+}
+```
+
+### Stop Generation
+
+Allow users to cancel long-running responses:
+
+```typescript
+function ChatInput({ session }: { session: AnswerSession }) {
+  const [isGenerating, setIsGenerating] = useState(false)
+
+  const handleStop = () => {
+    session.abortAnswer()
+    setIsGenerating(false)
+  }
+
+  return (
+    <div>
+      {isGenerating ? (
+        <button onClick={handleStop} className="stop-button">
+          ⏹ Stop Generating
+        </button>
+      ) : (
+        <button type="submit">Send</button>
+      )}
+    </div>
+  )
+}
+```
+
+### Context-Aware Search
+
+Customize search parameters based on the conversation:
+
+```typescript
+const session = new AnswerSession(db, {
+  systemPrompt: 'You are a helpful assistant.'
+})
+
+// Adjust search based on query intent
+async function intelligentAsk(query: string) {
+  const searchParams = {
+    term: query,
+    // Use more results for complex questions
+    limit: query.split(' ').length > 5 ? 10 : 5,
+    // Boost recent docs for "latest" or "new" queries
+    ...(query.match(/latest|new|recent/i) && {
+      sortBy: { property: 'publishDate', order: 'DESC' }
+    })
+  }
+
+  return await session.askStream(searchParams)
+}
+```
+
+## Performance Optimization
+
+### Debouncing Input
+
+```typescript
+import { debounce } from 'lodash'
+
+const debouncedAsk = debounce(async (query: string) => {
+  const stream = await session.askStream({ term: query })
+  for await (const chunk of stream) {
+    // Handle stream
+  }
+}, 500)
+
+// In your input handler
+const handleInputChange = (value: string) => {
+  setInput(value)
+  if (value.length > 3) {
+    debouncedAsk(value)
+  }
+}
+```
+
+### Caching Responses
+
+```typescript
+class CachedSession {
+  private cache = new Map<string, string>()
+  private session: AnswerSession
+
+  constructor(session: AnswerSession) {
+    this.session = session
+  }
+
+  async ask(query: string): Promise<string> {
+    const cacheKey = query.toLowerCase().trim()
+    
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey)!
+    }
+
+    const response = await this.session.ask({ term: query })
+    this.cache.set(cacheKey, response)
+    
+    return response
+  }
+
+  clearCache() {
+    this.cache.clear()
+  }
+}
+```
+
+## Testing
+
+```typescript
+import { describe, it, expect, beforeEach } from 'vitest'
+import { create, insert } from '@orama/orama'
+import { AnswerSession } from '@orama/orama'
+
+describe('AnswerSession', () => {
+  let db: any
+  let session: AnswerSession
+
+  beforeEach(async () => {
+    db = await create({
+      schema: { title: 'string', content: 'string' }
+    })
+
+    await insert(db, {
+      title: 'Test Doc',
+      content: 'Test content'
+    })
+
+    session = new AnswerSession(db, {
+      systemPrompt: 'You are a test assistant.'
+    })
+  })
+
+  it('should generate responses', async () => {
+    const response = await session.ask({ term: 'test' })
+    expect(response).toBeTruthy()
+    expect(typeof response).toBe('string')
+  })
+
+  it('should track message history', async () => {
+    await session.ask({ term: 'first question' })
+    await session.ask({ term: 'second question' })
+    
+    const messages = session.getMessages()
+    expect(messages.length).toBeGreaterThan(0)
+  })
+
+  it('should clear session', () => {
+    session.clearSession()
+    expect(session.getMessages()).toEqual([])
+    expect(session.state).toEqual([])
+  })
+})
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use streaming for real-time feedback">
+    Always prefer `askStream()` over `ask()` in user-facing applications to provide immediate feedback and reduce perceived latency.
+  </Accordion>
+  
+  <Accordion title="Display sources for transparency">
+    Show users which documents were used to generate responses. This builds trust and allows users to verify information.
+  </Accordion>
+  
+  <Accordion title="Implement graceful error handling">
+    Handle network errors, timeouts, and API failures gracefully with user-friendly error messages and retry logic.
+  </Accordion>
+  
+  <Accordion title="Persist conversation history">
+    Save conversation state to allow users to continue conversations across sessions and devices.
+  </Accordion>
+  
+  <Accordion title="Allow response cancellation">
+    Implement a "Stop" button to let users cancel long-running generations.
+  </Accordion>
+  
+  <Accordion title="Optimize search parameters">
+    Fine-tune search parameters (limit, boost, properties) based on your use case to improve response quality.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Search API" icon="magnifying-glass" href="/searching/introduction">
+    Learn about all available search parameters
+  </Card>
+  <Card title="Secure Proxy" icon="shield" href="/plugins/plugin-secure-proxy">
+    Configure the Secure Proxy plugin
+  </Card>
+  <Card title="TypeScript" icon="code" href="/guides/typescript">
+    Leverage full type safety in your chat app
+  </Card>
+  <Card title="Performance" icon="bolt" href="/guides/performance">
+    Optimize your Answer Engine performance
+  </Card>
+</CardGroup>

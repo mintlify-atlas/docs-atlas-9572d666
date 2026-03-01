@@ -1,0 +1,452 @@
+---
+title: 'Analytics Plugin'
+description: 'Track and analyze search queries, results, and user behavior with Orama Cloud'
+icon: 'chart-line'
+---
+
+## Overview
+
+The Orama Analytics Plugin provides comprehensive analytics for your search operations. Track queries, result counts, performance metrics, and user behavior through the Orama Cloud dashboard.
+
+<Info>
+  This plugin requires an [Orama Cloud](https://cloud.orama.com) account (free tier available).
+</Info>
+
+## Features
+
+- **Query Tracking**: Monitor all search queries and their parameters
+- **Performance Metrics**: Track search response times and performance
+- **Result Analytics**: Analyze result counts and relevance
+- **User Insights**: Understand search patterns and user behavior
+- **Automatic Batching**: Efficient data collection with configurable flush intervals
+- **Low Overhead**: Minimal performance impact on your application
+
+## Installation
+
+```bash
+npm install @orama/plugin-analytics
+```
+
+## Getting Started
+
+### 1. Get Your Credentials
+
+Sign up at [https://cloud.orama.com](https://cloud.orama.com) and obtain:
+- Your API key
+- Your index ID (create an index in the dashboard)
+
+### 2. Configure the Plugin
+
+```javascript
+import { create, search } from '@orama/orama'
+import { pluginAnalytics } from '@orama/plugin-analytics'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string'
+  },
+  plugins: [
+    pluginAnalytics({
+      apiKey: 'your-api-key',
+      indexId: 'your-index-id'
+    })
+  ]
+})
+```
+
+That's it! The plugin will now automatically track all search operations.
+
+## Configuration
+
+### Plugin Options
+
+<ParamField path="apiKey" type="string" required>
+  Your Orama Cloud API key
+</ParamField>
+
+<ParamField path="indexId" type="string" required>
+  The ID of your index in Orama Cloud
+</ParamField>
+
+<ParamField path="enabled" type="boolean" default="true">
+  Enable or disable analytics collection. Useful for development environments
+</ParamField>
+
+<ParamField path="deploymentId" type="string">
+  Optional deployment identifier for tracking multiple deployments
+</ParamField>
+
+<ParamField path="oramaId" type="string">
+  Custom Orama instance identifier. Defaults to the instance's auto-generated ID
+</ParamField>
+
+<ParamField path="endpoint" type="string">
+  Custom analytics endpoint. Defaults to Orama Cloud's analytics service
+</ParamField>
+
+<ParamField path="flushInterval" type="number" default="10000">
+  How often to send analytics data to the server (in milliseconds)
+</ParamField>
+
+<ParamField path="flushSize" type="number" default="10">
+  Maximum number of events to batch before sending to the server
+</ParamField>
+
+## Advanced Configuration
+
+### Environment-Based Analytics
+
+```javascript
+const db = await create({
+  schema: { /* ... */ },
+  plugins: [
+    pluginAnalytics({
+      apiKey: process.env.ORAMA_API_KEY,
+      indexId: process.env.ORAMA_INDEX_ID,
+      enabled: process.env.NODE_ENV === 'production', // Only in production
+      deploymentId: process.env.DEPLOYMENT_ID
+    })
+  ]
+})
+```
+
+### Custom Flush Behavior
+
+```javascript
+// Send data more frequently for real-time analytics
+pluginAnalytics({
+  apiKey: 'your-api-key',
+  indexId: 'your-index-id',
+  flushInterval: 5000,  // Flush every 5 seconds
+  flushSize: 5          // Flush after 5 events
+})
+
+// Optimize for high-volume applications
+pluginAnalytics({
+  apiKey: 'your-api-key',
+  indexId: 'your-index-id',
+  flushInterval: 30000, // Flush every 30 seconds
+  flushSize: 100        // Batch up to 100 events
+})
+```
+
+### Multiple Deployments
+
+```javascript
+// Track different deployments separately
+const productionDB = await create({
+  schema,
+  plugins: [
+    pluginAnalytics({
+      apiKey: 'your-api-key',
+      indexId: 'your-index-id',
+      deploymentId: 'production'
+    })
+  ]
+})
+
+const stagingDB = await create({
+  schema,
+  plugins: [
+    pluginAnalytics({
+      apiKey: 'your-api-key',
+      indexId: 'your-index-id',
+      deploymentId: 'staging'
+    })
+  ]
+})
+```
+
+## Tracked Metrics
+
+The analytics plugin automatically collects the following data for each search:
+
+### Query Data
+- Search term or query
+- Search mode (fulltext, vector, hybrid)
+- Search parameters (filters, properties, etc.)
+- Language
+
+### Result Data
+- Number of results found
+- Result IDs and scores
+- Whether results were cached
+
+### Performance Data
+- Round-trip time (search latency)
+- Timestamp of the search
+
+### Instance Data
+- Orama instance ID
+- Deployment ID (if configured)
+- Orama version
+
+## How It Works
+
+The plugin uses the `afterSearch` hook to collect analytics:
+
+At `/home/daytona/workspace/source/packages/plugin-analytics/src/index.ts:41-56`:
+
+```typescript
+const afterSearch: OramaPluginSync['afterSearch'] = <T extends AnyOrama>(
+  orama: T,
+  params: SearchParams<T>,
+  language: string | undefined,
+  results: Results<AnyDocument>
+) => {
+  collector?.add({
+    query: params as any,
+    resultsCount: results.count,
+    roundTripTime: Math.round(results.elapsed.raw / 1_000_000), // ns to ms
+    searchedAt: new Date(),
+    cached: false,
+    rawSearchString: params.term,
+    results: results.hits?.map((hit) => ({ id: hit.id, score: hit.score }))
+  })
+}
+```
+
+The collector batches events and sends them to Orama Cloud based on the configured flush interval and size.
+
+## Usage Examples
+
+### Basic Search Tracking
+
+```javascript
+const db = await create({
+  schema: {
+    title: 'string',
+    category: 'string'
+  },
+  plugins: [
+    pluginAnalytics({
+      apiKey: 'your-api-key',
+      indexId: 'your-index-id'
+    })
+  ]
+})
+
+// All searches are automatically tracked
+await search(db, {
+  term: 'laptop'
+})
+
+await search(db, {
+  term: 'phone',
+  where: {
+    category: 'electronics'
+  }
+})
+
+await search(db, {
+  term: 'headphones',
+  mode: 'hybrid',
+  limit: 20
+})
+```
+
+### Disable Analytics for Testing
+
+```javascript
+const db = await create({
+  schema,
+  plugins: [
+    pluginAnalytics({
+      apiKey: 'your-api-key',
+      indexId: 'your-index-id',
+      enabled: false // Disable for tests
+    })
+  ]
+})
+```
+
+## Viewing Analytics
+
+1. Log in to [Orama Cloud](https://cloud.orama.com)
+2. Navigate to your index
+3. Click on the "Analytics" tab
+4. View dashboards with:
+   - Query volume over time
+   - Top searches
+   - Average response times
+   - Zero-result queries
+   - User behavior patterns
+
+## Best Practices
+
+### 1. Enable Only in Production
+
+```javascript
+pluginAnalytics({
+  apiKey: process.env.ORAMA_API_KEY,
+  indexId: process.env.ORAMA_INDEX_ID,
+  enabled: process.env.NODE_ENV === 'production'
+})
+```
+
+### 2. Use Deployment IDs
+
+Track different environments separately:
+
+```javascript
+pluginAnalytics({
+  apiKey: 'your-api-key',
+  indexId: 'your-index-id',
+  deploymentId: `${process.env.ENVIRONMENT}-${process.env.VERSION}`
+})
+```
+
+### 3. Tune Flush Settings
+
+Balance between real-time data and server load:
+
+```javascript
+// Real-time analytics (more server requests)
+flushInterval: 5000,
+flushSize: 5
+
+// Batched analytics (fewer server requests)
+flushInterval: 30000,
+flushSize: 100
+```
+
+### 4. Combine with Other Plugins
+
+```javascript
+import { pluginAnalytics } from '@orama/plugin-analytics'
+import { pluginSecureProxy } from '@orama/plugin-secure-proxy'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    embeddings: 'vector[384]'
+  },
+  plugins: [
+    pluginSecureProxy({
+      apiKey: 'your-api-key',
+      embeddings: {
+        defaultProperty: 'embeddings',
+        model: 'orama/gte-small',
+        onInsert: {
+          generate: true,
+          properties: ['title']
+        }
+      }
+    }),
+    pluginAnalytics({
+      apiKey: 'your-api-key',
+      indexId: 'your-index-id'
+    })
+  ]
+})
+
+// Vector searches are tracked with full query parameters
+await search(db, {
+  term: 'wireless headphones',
+  mode: 'vector'
+})
+```
+
+## Privacy Considerations
+
+The analytics plugin collects:
+- ✅ Search queries and parameters
+- ✅ Result counts and IDs
+- ✅ Performance metrics
+- ✅ Timestamps
+
+The analytics plugin does NOT collect:
+- ❌ User IP addresses (unless you add custom metadata)
+- ❌ Personal identifiable information
+- ❌ Document content
+- ❌ User authentication data
+
+<Warning>
+  Ensure your search queries don't contain sensitive or personal information if you're subject to privacy regulations like GDPR.
+</Warning>
+
+## Performance Impact
+
+The analytics plugin is designed for minimal overhead:
+
+- **Synchronous collection**: Events are added to an in-memory queue instantly
+- **Asynchronous sending**: Data is sent to the server in the background
+- **Batching**: Multiple events are sent together to reduce network requests
+- **No blocking**: Search operations are never delayed by analytics
+
+```javascript
+// Analytics collection is non-blocking
+const start = Date.now()
+const results = await search(db, { term: 'test' })
+const searchTime = Date.now() - start
+
+// searchTime includes only the actual search, not analytics overhead
+```
+
+## Troubleshooting
+
+### Analytics Not Appearing
+
+1. Check that the plugin is enabled:
+   ```javascript
+   enabled: true
+   ```
+
+2. Verify your API key and index ID are correct
+
+3. Ensure you're performing searches (analytics only track searches)
+
+4. Wait for the flush interval - data may be batched
+
+### Network Errors
+
+The plugin will log errors but won't affect your search functionality:
+
+```javascript
+// Search continues to work even if analytics fail
+try {
+  const results = await search(db, { term: 'test' })
+  // results are returned normally
+} catch (error) {
+  // This will only catch search errors, not analytics errors
+}
+```
+
+### Testing Analytics
+
+Force immediate flushing during tests:
+
+```javascript
+const db = await create({
+  schema,
+  plugins: [
+    pluginAnalytics({
+      apiKey: 'your-api-key',
+      indexId: 'your-index-id',
+      flushInterval: 100,  // Flush quickly
+      flushSize: 1         // Flush after each event
+    })
+  ]
+})
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Orama Cloud" icon="cloud" href="https://cloud.orama.com">
+    Sign up and view your analytics dashboard
+  </Card>
+  
+  <Card title="Secure Proxy Plugin" icon="shield-check" href="/plugins/secure-proxy">
+    Combine analytics with cloud embeddings
+  </Card>
+  
+  <Card title="Search Guide" icon="magnifying-glass" href="/open-source/usage/search">
+    Learn more about search in Orama
+  </Card>
+  
+  <Card title="Custom Plugins" icon="code" href="/plugins/writing-plugins">
+    Build your own analytics plugin
+  </Card>
+</CardGroup>

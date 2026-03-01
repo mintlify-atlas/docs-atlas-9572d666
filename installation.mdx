@@ -1,0 +1,158 @@
+---
+title: Installation
+description: Install Orama using npm, yarn, pnpm, bun, CDN, or Deno to get started with powerful search capabilities.
+---
+
+Orama can be installed using your favorite package manager or imported directly via CDN. Choose the installation method that works best for your project.
+
+## Package managers
+
+Install Orama using npm, yarn, pnpm, or bun:
+
+<CodeGroup>
+
+```bash npm
+npm i @orama/orama
+```
+
+```bash yarn
+yarn add @orama/orama
+```
+
+```bash pnpm
+pnpm add @orama/orama
+```
+
+```bash bun
+bun add @orama/orama
+```
+
+</CodeGroup>
+
+Once installed, you can import Orama methods in your JavaScript or TypeScript files:
+
+```typescript
+import { create, insert, search } from '@orama/orama'
+```
+
+## CDN
+
+You can use Orama directly in the browser without any build step by importing it from a CDN:
+
+```html
+<html>
+  <body>
+    <script type="module">
+      import { create, insert, search } from 'https://cdn.jsdelivr.net/npm/@orama/orama@latest/+esm'
+
+      // Your code here
+      const db = create({
+        schema: {
+          title: 'string',
+          description: 'string'
+        }
+      })
+    </script>
+  </body>
+</html>
+```
+
+<Info>
+  For production use, it's recommended to pin to a specific version instead of using `@latest` to ensure consistent behavior.
+</Info>
+
+## Deno
+
+Orama works seamlessly with Deno. You can import it using npm specifiers:
+
+```typescript
+import { create, search, insert } from 'npm:@orama/orama'
+```
+
+Alternatively, you can use the same CDN URL as in the browser:
+
+```typescript
+import { create, search, insert } from 'https://cdn.jsdelivr.net/npm/@orama/orama@latest/+esm'
+```
+
+## TypeScript support
+
+Orama is written in TypeScript and includes full type definitions out of the box. You don't need to install any additional `@types` packages.
+
+When you create a database with a schema, Orama automatically infers types for your documents:
+
+```typescript
+import { create, insert } from '@orama/orama'
+
+const db = create({
+  schema: {
+    title: 'string',
+    year: 'number',
+    rating: 'number'
+  }
+})
+
+// TypeScript knows the shape of your documents
+insert(db, {
+  title: 'The Prestige',
+  year: 2006,
+  rating: 8.5
+})
+
+// This would cause a TypeScript error:
+// insert(db, { title: 123 }) // Error: Type 'number' is not assignable to type 'string'
+```
+
+## Requirements
+
+<Info>
+  Orama requires Node.js version 20.0.0 or higher when running in Node.js environments. There are no version requirements for browser, Deno, or Bun environments.
+</Info>
+
+## Verify installation
+
+To verify that Orama is installed correctly, create a simple test file:
+
+```typescript test.js
+import { create, insert, search } from '@orama/orama'
+
+const db = create({
+  schema: {
+    name: 'string'
+  }
+})
+
+insert(db, { name: 'Hello, Orama!' })
+
+const results = search(db, {
+  term: 'hello'
+})
+
+console.log(results)
+```
+
+Run the file with your runtime:
+
+<CodeGroup>
+
+```bash Node.js
+node test.js
+```
+
+```bash Deno
+deno run test.js
+```
+
+```bash Bun
+bun test.js
+```
+
+</CodeGroup>
+
+You should see search results printed to the console.
+
+## Next steps
+
+<Card title="Quickstart" icon="rocket" href="/quickstart">
+  Now that you have Orama installed, follow the quickstart guide to build your first search application.
+</Card>

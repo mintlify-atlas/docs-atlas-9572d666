@@ -1,0 +1,263 @@
+---
+title: Astro Integration
+description: Integrate Orama search into your Astro site with the official plugin
+---
+
+The Orama Astro plugin provides seamless integration for adding powerful search capabilities to your Astro websites. It generates search indexes at build time and enables client-side search functionality.
+
+## Installation
+
+Install the plugin using your preferred package manager:
+
+<CodeGroup>
+
+```bash npm
+npm install @orama/plugin-astro
+```
+
+```bash yarn
+yarn add @orama/plugin-astro
+```
+
+```bash pnpm
+pnpm add @orama/plugin-astro
+```
+
+</CodeGroup>
+
+## Configuration
+
+Add the Orama integration to your `astro.config.mjs` file:
+
+```typescript astro.config.mjs
+import { defineConfig } from 'astro/config'
+import orama from '@orama/plugin-astro'
+
+export default defineConfig({
+  integrations: [
+    orama({
+      // Define one or more database configurations
+      mydb: {
+        // Required: Only pages matching this regex will be indexed
+        pathMatcher: /blog\/[0-9]{4}\/[0-9]{2}\/[0-9]{2}\/.+$/,
+        
+        // Optional: Language for search (default: 'english')
+        language: 'spanish',
+        
+        // Optional: CSS selectors for content to index (default: ['body'])
+        contentSelectors: ['h1', 'main']
+      }
+    })
+  ]
+})
+```
+
+### Configuration Options
+
+<ParamField path="pathMatcher" type="RegExp" required>
+  A regular expression to match page paths that should be indexed. Only pages matching this pattern will be included in the search database.
+</ParamField>
+
+<ParamField path="language" type="string" default="english">
+  The language for text analysis and stemming. Supports multiple languages for better search accuracy.
+</ParamField>
+
+<ParamField path="contentSelectors" type="string[]" default="['body']">
+  Array of CSS selectors to specify which HTML elements should be indexed. Use this to focus on specific content areas.
+</ParamField>
+
+## Multiple Databases
+
+You can generate multiple search databases with different configurations:
+
+```typescript astro.config.mjs
+import { defineConfig } from 'astro/config'
+import orama from '@orama/plugin-astro'
+
+export default defineConfig({
+  integrations: [
+    orama({
+      blog: {
+        pathMatcher: /blog\/.+$/,
+        language: 'english',
+        contentSelectors: ['article']
+      },
+      docs: {
+        pathMatcher: /docs\/.+$/,
+        language: 'english',
+        contentSelectors: ['main', 'h1', 'h2', 'h3']
+      },
+      allPages: {
+        pathMatcher: /.*/,
+        language: 'english'
+      }
+    })
+  ]
+})
+```
+
+## Build Process
+
+When you run `astro build`, the plugin automatically:
+
+1. Scans all pages matching the configured path patterns
+2. Extracts and indexes content based on the content selectors
+3. Generates database files in the `dist/assets` directory
+4. Names each database as `oramaDB_<dbname>.json`
+
+For example, a database named `mydb` will be saved as `dist/assets/oramaDB_mydb.json`.
+
+## Client-Side Usage
+
+Use the generated databases in your pages by importing the client utilities:
+
+```html
+<head>
+  <script>
+    import { getOramaDB, search } from '@orama/plugin-astro/client'
+
+    // Load the database (async operation)
+    const db = await getOramaDB('mydb')
+
+    // Perform a search
+    const results = await search(db, { term: 'search query' })
+    console.log('Search Results:', results)
+  </script>
+</head>
+```
+
+### Interactive Search Component
+
+Here's a complete example of a search component:
+
+```astro SearchBox.astro
+---
+// Component script
+---
+
+<div class="search-container">
+  <input type="search" id="search-input" placeholder="Search..." />
+  <div id="search-results"></div>
+</div>
+
+<script>
+  import { getOramaDB, search } from '@orama/plugin-astro/client'
+
+  const searchInput = document.getElementById('search-input')
+  const searchResults = document.getElementById('search-results')
+  
+  // Load database on page load
+  const db = await getOramaDB('mydb')
+  
+  searchInput?.addEventListener('input', async (e) => {
+    const query = e.target.value
+    
+    if (query.length < 2) {
+      searchResults.innerHTML = ''
+      return
+    }
+    
+    const results = await search(db, { term: query, limit: 10 })
+    
+    searchResults.innerHTML = results.hits.map(hit => `
+      <div class="result-item">
+        <a href="${hit.document.path}">
+          <h3>${hit.document.title}</h3>
+          <p>${hit.document.content.substring(0, 150)}...</p>
+        </a>
+      </div>
+    `).join('')
+  })
+</script>
+
+<style>
+  .search-container {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  
+  #search-input {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  
+  #search-results {
+    margin-top: 16px;
+  }
+  
+  .result-item {
+    padding: 12px;
+    border-bottom: 1px solid #eee;
+  }
+  
+  .result-item:hover {
+    background-color: #f5f5f5;
+  }
+</style>
+```
+
+## API Reference
+
+### getOramaDB()
+
+Loads a database generated at build time.
+
+```typescript
+getOramaDB(dbName: string): Promise<AnyOrama>
+```
+
+<ParamField path="dbName" type="string" required>
+  The name of the database to load, as defined in your configuration.
+</ParamField>
+
+**Returns:** A Promise that resolves to an Orama database instance.
+
+### search()
+
+Performs a search query on the database.
+
+```typescript
+search(db: AnyOrama, params: SearchParams): Promise<SearchResult>
+```
+
+<ParamField path="db" type="AnyOrama" required>
+  The database instance returned by `getOramaDB()`.
+</ParamField>
+
+<ParamField path="params" type="SearchParams" required>
+  Search parameters including `term`, `limit`, `offset`, and more.
+</ParamField>
+
+**Returns:** A Promise that resolves to search results with hits and metadata.
+
+## Limitations
+
+<Warning>
+  The Astro plugin currently only supports **read-only** databases. You cannot insert, update, or delete documents at runtime. All indexing happens during the build process.
+</Warning>
+
+## Package Information
+
+- **Package Name:** `@orama/plugin-astro`
+- **Version:** 3.1.18
+- **License:** Apache-2.0
+- **Repository:** [github.com/oramasearch/orama](https://github.com/oramasearch/orama)
+
+## Requirements
+
+- Node.js >= 20.0.0
+- Astro ^2.0.4
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Search Configuration" icon="sliders" href="/cloud/search-configuration">
+    Learn about advanced search configuration options
+  </Card>
+  <Card title="Orama Core" icon="book" href="/open-source/orama">
+    Explore the core Orama search engine
+  </Card>
+</CardGroup>

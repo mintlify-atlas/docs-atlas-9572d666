@@ -1,0 +1,795 @@
+---
+title: 'Writing Custom Plugins'
+description: 'Learn how to create your own Orama plugins to extend search functionality'
+icon: 'code'
+---
+
+## Overview
+
+Orama's plugin system allows you to extend and customize search behavior by hooking into lifecycle events. This guide will teach you how to write your own plugins from scratch.
+
+## Plugin Structure
+
+A plugin is an object that implements the `OramaPluginSync` interface:
+
+```typescript
+import { OramaPluginSync } from '@orama/orama'
+
+const myPlugin: OramaPluginSync = {
+  name: 'my-custom-plugin',
+  
+  // Optional hooks
+  afterCreate: (orama) => { /* ... */ },
+  beforeInsert: (orama, id, doc) => { /* ... */ },
+  afterInsert: (orama, id, doc) => { /* ... */ },
+  beforeSearch: (orama, params, language) => { /* ... */ },
+  afterSearch: (orama, params, language, results) => { /* ... */ }
+  // ... more hooks
+}
+```
+
+## Available Hooks
+
+Based on `/home/daytona/workspace/source/packages/orama/src/types.ts:1372-1406`:
+
+### Document Lifecycle
+
+<AccordionGroup>
+  <Accordion title="Insert Hooks">
+    ```typescript
+    beforeInsert?: <T extends AnyOrama>(
+      orama: T,
+      id: string,
+      doc: AnyDocument
+    ) => SyncOrAsyncValue
+    
+    afterInsert?: <T extends AnyOrama>(
+      orama: T,
+      id: string,
+      doc: AnyDocument
+    ) => SyncOrAsyncValue
+    
+    beforeInsertMultiple?: <T extends AnyOrama>(
+      orama: T,
+      docs: AnyDocument[]
+    ) => SyncOrAsyncValue
+    
+    afterInsertMultiple?: <T extends AnyOrama>(
+      orama: T,
+      docs: AnyDocument[]
+    ) => SyncOrAsyncValue
+    ```
+  </Accordion>
+  
+  <Accordion title="Update Hooks">
+    ```typescript
+    beforeUpdate?: <T extends AnyOrama>(
+      orama: T,
+      id: string,
+      doc: AnyDocument
+    ) => SyncOrAsyncValue
+    
+    afterUpdate?: <T extends AnyOrama>(
+      orama: T,
+      id: string,
+      doc: AnyDocument
+    ) => SyncOrAsyncValue
+    
+    beforeUpdateMultiple?: <T extends AnyOrama>(
+      orama: T,
+      docs: AnyDocument[]
+    ) => SyncOrAsyncValue
+    
+    afterUpdateMultiple?: <T extends AnyOrama>(
+      orama: T,
+      docs: AnyDocument[]
+    ) => SyncOrAsyncValue
+    ```
+  </Accordion>
+  
+  <Accordion title="Remove Hooks">
+    ```typescript
+    beforeRemove?: <T extends AnyOrama>(
+      orama: T,
+      id: string,
+      doc: AnyDocument
+    ) => SyncOrAsyncValue
+    
+    afterRemove?: <T extends AnyOrama>(
+      orama: T,
+      id: string,
+      doc: AnyDocument
+    ) => SyncOrAsyncValue
+    
+    beforeRemoveMultiple?: <T extends AnyOrama>(
+      orama: T,
+      ids: string[]
+    ) => SyncOrAsyncValue
+    
+    afterRemoveMultiple?: <T extends AnyOrama>(
+      orama: T,
+      ids: string[]
+    ) => SyncOrAsyncValue
+    ```
+  </Accordion>
+  
+  <Accordion title="Upsert Hooks">
+    ```typescript
+    beforeUpsert?: <T extends AnyOrama>(
+      orama: T,
+      id: string,
+      doc: AnyDocument
+    ) => SyncOrAsyncValue
+    
+    afterUpsert?: <T extends AnyOrama>(
+      orama: T,
+      id: string,
+      doc: AnyDocument
+    ) => SyncOrAsyncValue
+    
+    beforeUpsertMultiple?: <T extends AnyOrama>(
+      orama: T,
+      docs: AnyDocument[]
+    ) => SyncOrAsyncValue
+    
+    afterUpsertMultiple?: <T extends AnyOrama>(
+      orama: T,
+      docs: AnyDocument[]
+    ) => SyncOrAsyncValue
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Search Hooks
+
+```typescript
+beforeSearch?: <T extends AnyOrama>(
+  orama: T,
+  params: SearchParams<T>,
+  language: string | undefined
+) => SyncOrAsyncValue
+
+afterSearch?: <T extends AnyOrama>(
+  orama: T,
+  params: SearchParams<T>,
+  language: string | undefined,
+  results: Results<TypedDocument<T>>
+) => SyncOrAsyncValue
+```
+
+### Instance Hooks
+
+```typescript
+afterCreate?: <T extends AnyOrama>(orama: T) => SyncOrAsyncValue
+
+beforeLoad?: <T extends AnyOrama>(orama: T) => SyncOrAsyncValue
+
+afterLoad?: <T extends AnyOrama>(orama: T) => SyncOrAsyncValue
+```
+
+## Basic Plugin Example
+
+### Logging Plugin
+
+Log all operations for debugging:
+
+```javascript
+import { create, insert, search } from '@orama/orama'
+
+const loggingPlugin = {
+  name: 'logging-plugin',
+  
+  afterInsert: (orama, id, doc) => {
+    console.log(`[INSERT] Document ${id}:`, doc)
+  },
+  
+  beforeSearch: (orama, params) => {
+    console.log('[SEARCH] Query:', params)
+  },
+  
+  afterSearch: (orama, params, language, results) => {
+    console.log(`[SEARCH] Found ${results.count} results in ${results.elapsed.formatted}`)
+  }
+}
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string'
+  },
+  plugins: [loggingPlugin]
+})
+
+await insert(db, { title: 'Test', description: 'A test document' })
+// [INSERT] Document 1: { title: 'Test', description: 'A test document' }
+
+await search(db, { term: 'test' })
+// [SEARCH] Query: { term: 'test' }
+// [SEARCH] Found 1 results in 2ms
+```
+
+## Advanced Plugin Examples
+
+### Validation Plugin
+
+Validate documents before insertion:
+
+```javascript
+function createValidationPlugin(schema) {
+  return {
+    name: 'validation-plugin',
+    
+    beforeInsert: (orama, id, doc) => {
+      // Validate required fields
+      for (const [field, type] of Object.entries(schema)) {
+        if (!(field in doc)) {
+          throw new Error(`Missing required field: ${field}`)
+        }
+        
+        const actualType = typeof doc[field]
+        if (type === 'string' && actualType !== 'string') {
+          throw new Error(`Field ${field} must be a string, got ${actualType}`)
+        }
+      }
+    }
+  }
+}
+
+// Usage
+const db = await create({
+  schema: {
+    title: 'string',
+    price: 'number'
+  },
+  plugins: [
+    createValidationPlugin({
+      title: 'string',
+      price: 'number'
+    })
+  ]
+})
+
+// This will throw an error
+try {
+  await insert(db, { title: 'Product' }) // Missing 'price'
+} catch (error) {
+  console.error(error.message) // "Missing required field: price"
+}
+```
+
+### Timestamp Plugin
+
+Automatically add timestamps to documents:
+
+```javascript
+const timestampPlugin = {
+  name: 'timestamp-plugin',
+  
+  beforeInsert: (orama, id, doc) => {
+    doc.createdAt = new Date().toISOString()
+    doc.updatedAt = new Date().toISOString()
+  },
+  
+  beforeUpdate: (orama, id, doc) => {
+    doc.updatedAt = new Date().toISOString()
+  }
+}
+
+const db = await create({
+  schema: {
+    title: 'string',
+    createdAt: 'string',
+    updatedAt: 'string'
+  },
+  plugins: [timestampPlugin]
+})
+
+await insert(db, { title: 'Article 1' })
+// Document now has createdAt and updatedAt fields
+```
+
+### Cache Plugin
+
+Cache search results for better performance:
+
+```javascript
+function createCachePlugin(ttl = 60000) {
+  const cache = new Map()
+  
+  return {
+    name: 'cache-plugin',
+    
+    beforeSearch: (orama, params) => {
+      const key = JSON.stringify(params)
+      const cached = cache.get(key)
+      
+      if (cached && Date.now() - cached.timestamp < ttl) {
+        console.log('Cache hit!')
+        // Return cached results (need to modify search flow)
+        params._cached = cached.results
+      }
+    },
+    
+    afterSearch: (orama, params, language, results) => {
+      if (!params._cached) {
+        const key = JSON.stringify(params)
+        cache.set(key, {
+          results,
+          timestamp: Date.now()
+        })
+      }
+    },
+    
+    // Clean up expired cache entries periodically
+    afterCreate: (orama) => {
+      setInterval(() => {
+        const now = Date.now()
+        for (const [key, value] of cache.entries()) {
+          if (now - value.timestamp >= ttl) {
+            cache.delete(key)
+          }
+        }
+      }, ttl)
+    }
+  }
+}
+
+const db = await create({
+  schema: { title: 'string' },
+  plugins: [createCachePlugin(30000)] // 30 second cache
+})
+```
+
+### Analytics Plugin
+
+Track search metrics:
+
+```javascript
+function createAnalyticsPlugin() {
+  const analytics = {
+    totalSearches: 0,
+    totalResults: 0,
+    searchTerms: new Map(),
+    avgResponseTime: 0
+  }
+  
+  return {
+    name: 'analytics-plugin',
+    extra: { analytics },
+    
+    afterSearch: (orama, params, language, results) => {
+      analytics.totalSearches++
+      analytics.totalResults += results.count
+      
+      // Track search terms
+      const term = params.term || ''
+      analytics.searchTerms.set(
+        term,
+        (analytics.searchTerms.get(term) || 0) + 1
+      )
+      
+      // Update average response time
+      const responseTime = results.elapsed.raw / 1_000_000 // ns to ms
+      analytics.avgResponseTime = 
+        (analytics.avgResponseTime * (analytics.totalSearches - 1) + responseTime) / 
+        analytics.totalSearches
+    },
+    
+    // Add method to get stats
+    getStats: () => ({
+      ...analytics,
+      topSearchTerms: Array.from(analytics.searchTerms.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+    })
+  }
+}
+
+const analyticsPlugin = createAnalyticsPlugin()
+
+const db = await create({
+  schema: { title: 'string' },
+  plugins: [analyticsPlugin]
+})
+
+// After some searches
+await search(db, { term: 'test' })
+await search(db, { term: 'example' })
+await search(db, { term: 'test' })
+
+// Get analytics
+console.log(analyticsPlugin.getStats())
+// {
+//   totalSearches: 3,
+//   totalResults: 15,
+//   avgResponseTime: 2.5,
+//   topSearchTerms: [['test', 2], ['example', 1]]
+// }
+```
+
+## Asynchronous Plugins
+
+Plugins can be async and perform async operations:
+
+```javascript
+function createEmbeddingsPlugin(apiKey) {
+  return {
+    name: 'embeddings-plugin',
+    
+    beforeInsert: async (orama, id, doc) => {
+      // Generate embeddings asynchronously
+      const response = await fetch('https://api.example.com/embeddings', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ text: doc.text })
+      })
+      
+      const { embeddings } = await response.json()
+      doc.embeddings = embeddings
+    },
+    
+    beforeSearch: async (orama, params) => {
+      if (params.mode === 'vector' && params.term) {
+        const response = await fetch('https://api.example.com/embeddings', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ text: params.term })
+        })
+        
+        const { embeddings } = await response.json()
+        params.vector = {
+          property: 'embeddings',
+          value: embeddings
+        }
+      }
+    }
+  }
+}
+
+const db = await create({
+  schema: {
+    text: 'string',
+    embeddings: 'vector[384]'
+  },
+  plugins: [createEmbeddingsPlugin('your-api-key')]
+})
+```
+
+## Plugin Factory Pattern
+
+Create configurable plugins using factory functions:
+
+```javascript
+function createTransformPlugin(config) {
+  const {
+    fields = [],
+    transform = (value) => value,
+    onInsert = true,
+    onUpdate = true
+  } = config
+  
+  const applyTransform = (doc) => {
+    for (const field of fields) {
+      if (field in doc) {
+        doc[field] = transform(doc[field])
+      }
+    }
+  }
+  
+  return {
+    name: 'transform-plugin',
+    
+    beforeInsert: onInsert ? (orama, id, doc) => {
+      applyTransform(doc)
+    } : undefined,
+    
+    beforeUpdate: onUpdate ? (orama, id, doc) => {
+      applyTransform(doc)
+    } : undefined
+  }
+}
+
+// Usage: Lowercase all titles
+const lowercasePlugin = createTransformPlugin({
+  fields: ['title', 'category'],
+  transform: (value) => value.toLowerCase()
+})
+
+// Usage: Trim whitespace
+const trimPlugin = createTransformPlugin({
+  fields: ['description'],
+  transform: (value) => value.trim()
+})
+
+const db = await create({
+  schema: {
+    title: 'string',
+    category: 'string',
+    description: 'string'
+  },
+  plugins: [lowercasePlugin, trimPlugin]
+})
+```
+
+## Plugin with Extra Data
+
+Store plugin-specific data using the `extra` property:
+
+```javascript
+function createCounterPlugin() {
+  const stats = {
+    inserts: 0,
+    updates: 0,
+    removes: 0,
+    searches: 0
+  }
+  
+  return {
+    name: 'counter-plugin',
+    extra: { stats },
+    
+    afterInsert: () => { stats.inserts++ },
+    afterUpdate: () => { stats.updates++ },
+    afterRemove: () => { stats.removes++ },
+    afterSearch: () => { stats.searches++ }
+  }
+}
+
+const counterPlugin = createCounterPlugin()
+
+const db = await create({
+  schema: { title: 'string' },
+  plugins: [counterPlugin]
+})
+
+// Access plugin data
+const plugin = db.plugins.find(p => p.name === 'counter-plugin')
+console.log(plugin.extra.stats)
+// { inserts: 5, updates: 2, removes: 1, searches: 10 }
+```
+
+## TypeScript Support
+
+Create fully typed plugins:
+
+```typescript
+import { OramaPluginSync, AnyOrama, AnyDocument } from '@orama/orama'
+
+interface ValidationConfig {
+  required?: string[]
+  custom?: (doc: AnyDocument) => void
+}
+
+interface ValidationPluginExtra {
+  config: ValidationConfig
+  errors: Array<{ id: string; error: string }>
+}
+
+function createValidationPlugin(
+  config: ValidationConfig
+): OramaPluginSync<ValidationPluginExtra> {
+  const errors: Array<{ id: string; error: string }> = []
+  
+  return {
+    name: 'validation-plugin',
+    extra: { config, errors },
+    
+    beforeInsert: <T extends AnyOrama>(orama: T, id: string, doc: AnyDocument) => {
+      // Check required fields
+      for (const field of config.required || []) {
+        if (!(field in doc)) {
+          const error = `Missing required field: ${field}`
+          errors.push({ id, error })
+          throw new Error(error)
+        }
+      }
+      
+      // Custom validation
+      if (config.custom) {
+        try {
+          config.custom(doc)
+        } catch (error) {
+          errors.push({ id, error: (error as Error).message })
+          throw error
+        }
+      }
+    }
+  }
+}
+
+// Usage with full type safety
+const plugin = createValidationPlugin({
+  required: ['title', 'price'],
+  custom: (doc) => {
+    if (typeof doc.price === 'number' && doc.price < 0) {
+      throw new Error('Price cannot be negative')
+    }
+  }
+})
+```
+
+## Testing Plugins
+
+```javascript
+import { test } from 'node:test'
+import assert from 'node:assert'
+import { create, insert, search } from '@orama/orama'
+
+test('logging plugin logs operations', async () => {
+  const logs = []
+  
+  const loggingPlugin = {
+    name: 'test-logging',
+    afterInsert: (orama, id, doc) => {
+      logs.push({ type: 'insert', id, doc })
+    },
+    afterSearch: (orama, params, lang, results) => {
+      logs.push({ type: 'search', count: results.count })
+    }
+  }
+  
+  const db = await create({
+    schema: { title: 'string' },
+    plugins: [loggingPlugin]
+  })
+  
+  await insert(db, { title: 'Test' })
+  assert.equal(logs.length, 1)
+  assert.equal(logs[0].type, 'insert')
+  
+  await search(db, { term: 'test' })
+  assert.equal(logs.length, 2)
+  assert.equal(logs[1].type, 'search')
+})
+```
+
+## Best Practices
+
+### 1. Keep Plugins Focused
+
+Each plugin should have a single, clear purpose:
+
+```javascript
+// ✅ Good - focused on one task
+const timestampPlugin = { /* adds timestamps */ }
+const validationPlugin = { /* validates data */ }
+
+// ❌ Bad - does too many things
+const megaPlugin = { /* timestamps, validation, logging, analytics */ }
+```
+
+### 2. Use Factory Functions
+
+Make plugins configurable:
+
+```javascript
+// ✅ Good - configurable
+function createPlugin(options) {
+  return { name: 'plugin', /* ... */ }
+}
+
+// ❌ Bad - hardcoded behavior
+const plugin = { name: 'plugin', /* hardcoded */ }
+```
+
+### 3. Handle Errors Gracefully
+
+```javascript
+const safePlugin = {
+  name: 'safe-plugin',
+  afterInsert: (orama, id, doc) => {
+    try {
+      // Plugin logic
+    } catch (error) {
+      console.error('Plugin error:', error)
+      // Don't throw - let insert succeed
+    }
+  }
+}
+```
+
+### 4. Document Your Plugin
+
+```javascript
+/**
+ * Creates a plugin that normalizes text fields
+ * 
+ * @param {Object} options - Plugin options
+ * @param {string[]} options.fields - Fields to normalize
+ * @param {boolean} options.lowercase - Convert to lowercase
+ * @param {boolean} options.trim - Trim whitespace
+ * @returns {OramaPluginSync} The plugin instance
+ * 
+ * @example
+ * const plugin = createNormalizePlugin({
+ *   fields: ['title', 'description'],
+ *   lowercase: true,
+ *   trim: true
+ * })
+ */
+function createNormalizePlugin(options) {
+  // ...
+}
+```
+
+### 5. Performance Considerations
+
+Minimize work in hot paths:
+
+```javascript
+// ✅ Good - minimal overhead
+const fastPlugin = {
+  name: 'fast',
+  afterInsert: (orama, id, doc) => {
+    doc.indexed = true // Quick operation
+  }
+}
+
+// ❌ Bad - heavy operation in hot path
+const slowPlugin = {
+  name: 'slow',
+  afterInsert: async (orama, id, doc) => {
+    await fetch('...') // Network call on every insert!
+  }
+}
+```
+
+## Publishing Your Plugin
+
+If you create a useful plugin, consider publishing it:
+
+### Package Structure
+
+```
+my-orama-plugin/
+├── src/
+│   └── index.ts
+├── dist/
+│   ├── index.js
+│   └── index.d.ts
+├── package.json
+├── README.md
+└── tsconfig.json
+```
+
+### package.json
+
+```json
+{
+  "name": "@yourname/orama-plugin-example",
+  "version": "1.0.0",
+  "description": "Example plugin for Orama",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "keywords": ["orama", "plugin", "search"],
+  "peerDependencies": {
+    "@orama/orama": "^2.0.0"
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Plugin Overview" icon="puzzle-piece" href="/plugins/overview">
+    Learn more about the plugin system
+  </Card>
+  
+  <Card title="Official Plugins" icon="star" href="/plugins/embeddings">
+    Explore official Orama plugins
+  </Card>
+  
+  <Card title="TypeScript Types" icon="code" href="/open-source/usage/typescript">
+    TypeScript support in Orama
+  </Card>
+  
+  <Card title="Examples" icon="code-branch" href="https://github.com/oramasearch/orama">
+    View plugin examples on GitHub
+  </Card>
+</CardGroup>

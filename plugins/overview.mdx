@@ -1,0 +1,182 @@
+---
+title: 'Plugins Overview'
+description: 'Extend Orama with powerful plugins for embeddings, analytics, persistence, and more'
+icon: 'puzzle-piece'
+---
+
+## What are Orama Plugins?
+
+Orama's plugin system allows you to extend and customize the behavior of your search instances with additional functionality. Plugins hook into Orama's lifecycle events to modify data at insert time, enhance search queries, collect analytics, and more.
+
+## Available Plugins
+
+<CardGroup cols={2}>
+  <Card title="Embeddings" icon="brain" href="/plugins/embeddings">
+    Generate text embeddings offline for vector and hybrid search
+  </Card>
+  
+  <Card title="Secure Proxy" icon="shield-check" href="/plugins/secure-proxy">
+    Cloud-based embeddings and LLM features with secure API proxy
+  </Card>
+  
+  <Card title="Analytics" icon="chart-line" href="/plugins/analytics">
+    Track and analyze search queries, results, and user behavior
+  </Card>
+  
+  <Card title="Data Persistence" icon="database" href="/plugins/data-persistence">
+    Serialize and restore Orama instances in multiple formats
+  </Card>
+  
+  <Card title="Match Highlight" icon="highlighter" href="/plugins/match-highlight">
+    Highlight search matches in results (deprecated)
+  </Card>
+  
+  <Card title="ParseDoc" icon="file-code" href="/plugins/parsedoc">
+    Parse and index HTML/Markdown documentation files
+  </Card>
+</CardGroup>
+
+## How Plugins Work
+
+Plugins implement hooks that are called at specific points in Orama's lifecycle:
+
+```javascript
+import { create } from '@orama/orama'
+import { myPlugin } from '@orama/plugin-example'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string'
+  },
+  plugins: [myPlugin({
+    // Plugin configuration
+  })]
+})
+```
+
+## Available Plugin Hooks
+
+Orama provides the following lifecycle hooks for plugins:
+
+<AccordionGroup>
+  <Accordion title="Insert Hooks">
+    - `beforeInsert` - Called before inserting a document
+    - `afterInsert` - Called after inserting a document
+    - `beforeInsertMultiple` - Called before inserting multiple documents
+    - `afterInsertMultiple` - Called after inserting multiple documents
+  </Accordion>
+  
+  <Accordion title="Update Hooks">
+    - `beforeUpdate` - Called before updating a document
+    - `afterUpdate` - Called after updating a document
+    - `beforeUpdateMultiple` - Called before updating multiple documents
+    - `afterUpdateMultiple` - Called after updating multiple documents
+  </Accordion>
+  
+  <Accordion title="Remove Hooks">
+    - `beforeRemove` - Called before removing a document
+    - `afterRemove` - Called after removing a document
+    - `beforeRemoveMultiple` - Called before removing multiple documents
+    - `afterRemoveMultiple` - Called after removing multiple documents
+  </Accordion>
+  
+  <Accordion title="Upsert Hooks">
+    - `beforeUpsert` - Called before upserting a document
+    - `afterUpsert` - Called after upserting a document
+    - `beforeUpsertMultiple` - Called before upserting multiple documents
+    - `afterUpsertMultiple` - Called after upserting multiple documents
+  </Accordion>
+  
+  <Accordion title="Search Hooks">
+    - `beforeSearch` - Called before performing a search
+    - `afterSearch` - Called after performing a search
+  </Accordion>
+  
+  <Accordion title="Instance Hooks">
+    - `afterCreate` - Called after creating an Orama instance
+    - `beforeLoad` - Called before loading data into an instance
+    - `afterLoad` - Called after loading data into an instance
+  </Accordion>
+</AccordionGroup>
+
+## Plugin Types
+
+Orama supports both synchronous and asynchronous plugins:
+
+### Synchronous Plugins
+
+```typescript
+import { OramaPluginSync } from '@orama/orama'
+
+const mySyncPlugin: OramaPluginSync = {
+  name: 'my-sync-plugin',
+  afterInsert: (orama, id, doc) => {
+    console.log('Document inserted:', id)
+  }
+}
+```
+
+### Asynchronous Plugins
+
+```typescript
+import { OramaPluginAsync } from '@orama/orama'
+
+async function myAsyncPlugin(): Promise<OramaPluginAsync> {
+  const model = await loadModel()
+  
+  return {
+    name: 'my-async-plugin',
+    beforeInsert: async (orama, id, doc) => {
+      doc.embeddings = await model.embed(doc.text)
+    }
+  }
+}
+```
+
+## Using Multiple Plugins
+
+You can use multiple plugins together. They will be executed in the order they are defined:
+
+```javascript
+import { create } from '@orama/orama'
+import { pluginAnalytics } from '@orama/plugin-analytics'
+import { pluginSecureProxy } from '@orama/plugin-secure-proxy'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    embeddings: 'vector[384]'
+  },
+  plugins: [
+    pluginSecureProxy({
+      apiKey: 'your-api-key',
+      embeddings: {
+        defaultProperty: 'embeddings',
+        model: 'orama/gte-small',
+        onInsert: {
+          generate: true,
+          properties: ['title', 'description']
+        }
+      }
+    }),
+    pluginAnalytics({
+      apiKey: 'your-api-key',
+      indexId: 'your-index-id'
+    })
+  ]
+})
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Write Custom Plugins" icon="code" href="/plugins/writing-plugins">
+    Learn how to create your own Orama plugins
+  </Card>
+  
+  <Card title="Explore Official Plugins" icon="puzzle-piece" href="/plugins/embeddings">
+    Browse available official plugins
+  </Card>
+</CardGroup>

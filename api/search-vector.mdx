@@ -1,0 +1,203 @@
+---
+title: searchVector()
+description: Perform vector similarity search on an Orama database
+---
+
+Perform a vector similarity search using k-nearest neighbors (KNN). This is a convenience function that's equivalent to calling `search()` with `mode: 'vector'`.
+
+## Signature
+
+```typescript
+function searchVector<T extends AnyOrama, ResultDocument = TypedDocument<T>>(
+  orama: T,
+  params: SearchParamsVector<T, ResultDocument>,
+  language?: Language
+): Results<ResultDocument> | Promise<Results<ResultDocument>>
+```
+
+## Parameters
+
+<ParamField path="orama" type="AnyOrama" required>
+  The Orama database instance to search.
+</ParamField>
+
+<ParamField path="params" type="SearchParamsVector" required>
+  Vector search parameters:
+  
+  <ParamField path="vector" type="object" required>
+    Vector configuration:
+    - `value`: Array of numbers or Float32Array representing the query vector
+    - `property`: Name of the vector property in your schema
+  </ParamField>
+  
+  <ParamField path="similarity" type="number" default={0.8}>
+    Minimum similarity threshold (0-1). Documents with lower similarity scores are filtered out.
+  </ParamField>
+  
+  <ParamField path="limit" type="number" default={10}>
+    Maximum number of results to return.
+  </ParamField>
+  
+  <ParamField path="offset" type="number" default={0}>
+    Number of results to skip (for pagination).
+  </ParamField>
+  
+  <ParamField path="where" type="WhereCondition">
+    Filter conditions to apply before vector search.
+  </ParamField>
+  
+  <ParamField path="facets" type="FacetsParams">
+    Facet configuration for result aggregation.
+  </ParamField>
+  
+  <ParamField path="groupBy" type="GroupByParams">
+    Group results by specific properties.
+  </ParamField>
+  
+  <ParamField path="includeVectors" type="boolean" default={false}>
+    Whether to include vector values in results. By default, vectors are set to `null` to reduce payload size.
+  </ParamField>
+</ParamField>
+
+<ParamField path="language" type="string" default="'english'">
+  Language for tokenization (used if `where` filters contain text fields).
+</ParamField>
+
+## Returns
+
+<ResponseField name="count" type="number">
+  Total number of matching documents.
+</ResponseField>
+
+<ResponseField name="hits" type="Result[]">
+  Array of search results, each containing:
+  - `id`: Document ID (string)
+  - `score`: Similarity score (higher is more similar)
+  - `document`: The matched document
+</ResponseField>
+
+<ResponseField name="elapsed" type="object">
+  Search execution time:
+  - `raw`: Time in nanoseconds
+  - `formatted`: Human-readable formatted time string
+</ResponseField>
+
+<ResponseField name="facets" type="FacetResult">
+  Facet aggregations (if `facets` parameter was provided).
+</ResponseField>
+
+<ResponseField name="groups" type="GroupResult[]">
+  Grouped results (if `groupBy` parameter was provided).
+</ResponseField>
+
+## Examples
+
+### Basic Vector Search
+
+```typescript
+import { create, insert, searchVector } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    embedding: 'vector[384]'
+  }
+})
+
+// Insert documents with embeddings
+await insert(db, {
+  title: 'Wireless Headphones',
+  description: 'Premium noise-cancelling headphones',
+  embedding: [0.1, 0.2, 0.3, ...] // 384-dimensional vector
+})
+
+// Search using a query vector
+const results = await searchVector(db, {
+  vector: {
+    value: [0.15, 0.22, 0.31, ...], // Query embedding
+    property: 'embedding'
+  },
+  limit: 5
+})
+
+console.log(results.hits)
+// [
+//   { id: '1', score: 0.95, document: { title: 'Wireless Headphones', ... } },
+//   { id: '2', score: 0.87, document: { title: 'Bluetooth Earbuds', ... } }
+// ]
+```
+
+### Vector Search with Filters
+
+```typescript
+const results = await searchVector(db, {
+  vector: {
+    value: queryEmbedding,
+    property: 'embedding'
+  },
+  where: {
+    price: {
+      lt: 200
+    },
+    category: 'electronics'
+  },
+  similarity: 0.85,
+  limit: 10
+})
+```
+
+### Vector Search with Similarity Threshold
+
+```typescript
+// Only return results with similarity >= 0.9
+const results = await searchVector(db, {
+  vector: {
+    value: queryEmbedding,
+    property: 'embedding'
+  },
+  similarity: 0.9
+})
+```
+
+### Include Vectors in Results
+
+```typescript
+const results = await searchVector(db, {
+  vector: {
+    value: queryEmbedding,
+    property: 'embedding'
+  },
+  includeVectors: true // Vectors will be included in documents
+})
+
+console.log(results.hits[0].document.embedding) // [0.1, 0.2, 0.3, ...]
+```
+
+### Pagination
+
+```typescript
+// Get results 11-20
+const results = await searchVector(db, {
+  vector: {
+    value: queryEmbedding,
+    property: 'embedding'
+  },
+  limit: 10,
+  offset: 10
+})
+```
+
+## Notes
+
+- Vector dimensions must match the size defined in your schema (e.g., `vector[384]` requires 384-dimensional vectors)
+- The `similarity` parameter uses cosine similarity by default
+- Vectors are automatically normalized internally
+- For better performance with large datasets, consider using filters to narrow down the search space before vector comparison
+- Pinning rules are automatically applied to vector search results
+
+## Related
+
+- [search()](/api/search)
+- [Vector Search Guide](/search/vector-search)
+- [Hybrid Search](/search/hybrid-search)

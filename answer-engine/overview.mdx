@@ -1,0 +1,145 @@
+---
+title: Answer Engine Overview
+description: Build ChatGPT-like experiences with RAG using Orama's Answer Engine
+---
+
+# Answer Engine Overview
+
+Orama's Answer Engine enables you to create ChatGPT, Perplexity, or SearchGPT-like experiences using Retrieval Augmented Generation (RAG). Combine powerful full-text search with AI-powered chat capabilities to build intelligent conversational interfaces.
+
+## What is RAG?
+
+Retrieval Augmented Generation (RAG) is a technique that enhances large language models by providing them with relevant context from your data. Instead of relying solely on the model's training data, RAG:
+
+1. **Searches** your database for relevant documents
+2. **Retrieves** the most relevant results as context
+3. **Generates** responses based on both the query and the retrieved context
+
+This approach dramatically improves accuracy, reduces hallucinations, and keeps responses grounded in your actual data.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Streaming Responses" icon="water">
+    Get real-time, token-by-token responses for a smooth user experience
+  </Card>
+  <Card title="Source Attribution" icon="link">
+    Track which documents were used to generate each response
+  </Card>
+  <Card title="Session Management" icon="comments">
+    Maintain conversation context across multiple interactions
+  </Card>
+  <Card title="Custom Prompts" icon="wand-magic-sparkles">
+    Customize system prompts to control AI behavior
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+Here's a minimal example to get you started:
+
+```javascript
+import { create, insert } from '@orama/orama'
+import { pluginSecureProxy } from '@orama/plugin-secure-proxy'
+import { AnswerSession } from '@orama/orama'
+
+// Step 1: Configure the Secure Proxy Plugin
+const secureProxy = await pluginSecureProxy({
+  apiKey: 'my-api-key',
+  defaultProperty: 'embeddings',
+  models: {
+    // The chat model to use to generate the chat answer
+    chat: 'openai/gpt-4o-mini'
+  }
+})
+
+// Step 2: Create your database with the plugin
+const db = await create({
+  schema: {
+    name: 'string',
+    description: 'string'
+  },
+  plugins: [secureProxy]
+})
+
+// Step 3: Insert your data
+await insert(db, { name: 'John Doe', description: 'Software engineer' })
+await insert(db, { name: 'Jane Doe', description: 'Product manager' })
+
+// Step 4: Create an Answer Session
+const session = new AnswerSession(db, {
+  systemPrompt: 'You are a helpful assistant that provides information about people.',
+  events: {
+    onStateChange: (state) => {
+      console.log('State updated:', state)
+    }
+  }
+})
+
+// Step 5: Ask questions
+const response = await session.ask({
+  term: 'john'
+})
+
+console.log(response) // AI-generated response about John Doe
+```
+
+## How It Works
+
+When you call `session.ask()`, Orama performs the following steps:
+
+<Steps>
+  <Step title="Search Phase">
+    Orama searches your database using the provided query term and returns the most relevant documents.
+  </Step>
+  <Step title="Context Building">
+    The retrieved documents are formatted and added to the conversation context.
+  </Step>
+  <Step title="AI Generation">
+    The query and context are sent to the configured LLM (via Secure Proxy) to generate a response.
+  </Step>
+  <Step title="Streaming Response">
+    The response is streamed back token-by-token, with state updates triggered for each chunk.
+  </Step>
+</Steps>
+
+## Secure Proxy Plugin
+
+The Answer Engine requires the [Secure Proxy Plugin](/plugins/plugin-secure-proxy) to securely communicate with AI providers like OpenAI. This plugin:
+
+- Keeps your API keys secure on the server side
+- Handles authentication and rate limiting
+- Supports multiple AI providers and models
+- Is **completely free** to use
+
+<Note>
+  The Secure Proxy Plugin is essential for Answer Engine to work. Make sure to configure it with a valid API key and chat model.
+</Note>
+
+## Available Chat Models
+
+When configuring the Secure Proxy Plugin, you can choose from various chat models:
+
+- `openai/gpt-4o` - Most capable OpenAI model
+- `openai/gpt-4o-mini` - Fast and cost-effective
+- `openai/gpt-4-turbo` - Balanced performance
+- `openai/gpt-3.5-turbo` - Budget-friendly option
+
+Refer to the [Secure Proxy documentation](/plugins/plugin-secure-proxy) for a complete list of supported models.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Sessions" icon="gear" href="/answer-engine/sessions">
+    Learn how to customize AnswerSession with system prompts, context, and events
+  </Card>
+  <Card title="Build Chat UIs" icon="messages" href="/answer-engine/chat">
+    Create interactive chat experiences with streaming responses
+  </Card>
+</CardGroup>
+
+## Additional Resources
+
+- [Search API Reference](/searching/introduction)
+- [Plugin System](/plugins/introduction)
+- [TypeScript Support](/guides/typescript)

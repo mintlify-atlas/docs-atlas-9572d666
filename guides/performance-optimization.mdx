@@ -1,0 +1,519 @@
+---
+title: 'Performance Optimization'
+description: 'Tips and techniques for optimizing Orama search performance'
+icon: 'gauge-high'
+---
+
+Maximize the performance of your Orama search engine with these optimization strategies for indexing, searching, and memory management.
+
+## Indexing Performance
+
+### Batch Insertions
+
+Always use `insertMultiple` instead of multiple `insert` calls:
+
+```javascript
+import { create, insertMultiple } from '@orama/orama'
+
+const db = create({ schema: { title: 'string', body: 'string' } })
+
+// ❌ Slow: Individual inserts
+for (const doc of documents) {
+  await insert(db, doc)
+}
+
+// ✅ Fast: Batch insert
+await insertMultiple(db, documents, 1000)
+```
+
+<Tip>
+**Performance gain**: Batch insertions are 10-100x faster depending on dataset size because they optimize tree rebalancing operations.
+</Tip>
+
+### AVL Tree Rebalancing
+
+The `insertMultiple` method automatically optimizes AVL tree rebalancing:
+
+```javascript packages/orama/src/methods/insert.ts
+// Internal optimization: Defer rebalancing during batch operations
+const options = { avlRebalanceThreshold: batch.length }
+const id = await insert(orama, doc, language, skipHooks, options)
+```
+
+This defers expensive rebalancing operations until the batch is complete, significantly improving insertion speed.
+
+### Adjust Batch Size
+
+Optimize batch size based on your document characteristics:
+
+```javascript
+// Small documents (< 1KB)
+await insertMultiple(db, docs, 5000)
+
+// Medium documents (1-10KB) - default
+await insertMultiple(db, docs, 1000)
+
+// Large documents (> 10KB) or with vectors
+await insertMultiple(db, docs, 100)
+```
+
+<Info>
+The default batch size is 1000. Adjust based on available memory and document complexity.
+</Info>
+
+## Search Performance
+
+### Limit Result Size
+
+Always specify reasonable limits:
+
+```javascript
+import { search } from '@orama/orama'
+
+// ❌ Slow: Retrieving too many results
+const results = await search(db, {
+  term: 'javascript',
+  limit: 10000
+})
+
+// ✅ Fast: Reasonable limit
+const results = await search(db, {
+  term: 'javascript',
+  limit: 20
+})
+```
+
+### Use Offset Pagination Wisely
+
+```javascript
+// Efficient pagination
+const page1 = await search(db, { term: 'query', limit: 20, offset: 0 })
+const page2 = await search(db, { term: 'query', limit: 20, offset: 20 })
+const page3 = await search(db, { term: 'query', limit: 20, offset: 40 })
+```
+
+<Warning>
+Deep pagination (large offsets) can impact performance. Orama still needs to process skipped results.
+</Warning>
+
+### Property Selection
+
+Return only the fields you need:
+
+```javascript
+const results = await search(db, {
+  term: 'javascript',
+  properties: ['title', 'id'],  // Only return specific fields
+  limit: 20
+})
+```
+
+This reduces the amount of data transferred and processed, especially important for large documents.
+
+### Optimize Filters
+
+```javascript
+// ✅ Efficient: Use indexed properties in filters
+const results = await search(db, {
+  term: 'laptop',
+  where: {
+    price: { lte: 1000 },
+    inStock: true
+  }
+})
+
+// Performance tip: Filters on indexed properties are fastest
+```
+
+## Schema Design Optimization
+
+### Index Only Searchable Fields
+
+Don't make every field searchable if you don't need to search it:
+
+```javascript
+const db = create({
+  schema: {
+    title: 'string',        // Searchable
+    description: 'string',  // Searchable
+    metadata: {             // Not searchable - faster indexing
+      created: 'string',
+      updated: 'string'
+    }
+  }
+})
+```
+
+<Info>
+Only properties defined in the top-level schema are indexed for search. Nested objects are stored but not searchable by default.
+</Info>
+
+### Use Appropriate Types
+
+```javascript
+const db = create({
+  schema: {
+    price: 'number',        // ✅ Correct type for numeric filtering/sorting
+    category: 'enum',       // ✅ Enum is faster than string for fixed values
+    tags: 'string[]',       // ✅ Array type for multiple values
+    inStock: 'boolean'      // ✅ Boolean for true/false values
+  }
+})
+```
+
+### Vector Dimensionality
+
+Keep vector dimensions reasonable:
+
+```javascript
+// ❌ Overkill for most use cases
+embedding: 'vector[1536]'  // OpenAI embeddings
+
+// ✅ Often sufficient
+embedding: 'vector[384]'   // MiniLM embeddings - 4x smaller, faster
+
+// ✅ Very fast
+embedding: 'vector[128]'   // Custom small embeddings
+```
+
+<CardGroup cols={2}>
+  <Card title="Smaller Vectors" icon="down">
+    Lower dimensions = faster vector search and less memory
+  </Card>
+  <Card title="Accuracy Trade-off" icon="balance-scale">
+    Test your use case to find the optimal dimension/accuracy balance
+  </Card>
+</CardGroup>
+
+## Memory Optimization
+
+### Minimize Document Storage
+
+Store only what you need:
+
+```javascript
+const db = create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    searchableContent: 'string',  // Full content for search
+    // Don't store large binary data or unnecessary metadata
+  }
+})
+
+// Store references instead of full content
+await insert(db, {
+  id: 'doc-1',
+  title: 'Article Title',
+  searchableContent: content.substring(0, 5000), // Truncate if needed
+  // url: 'https://...' // Store link to full content
+})
+```
+
+### Persistence Strategy
+
+Use the data persistence plugin to save/load databases:
+
+```javascript
+import { create, insertMultiple, save, load } from '@orama/orama'
+
+// After initial indexing
+const db = create({ schema })
+await insertMultiple(db, documents)
+
+// Save to disk/localStorage
+const serialized = await save(db)
+await fs.writeFile('db.json', JSON.stringify(serialized))
+
+// Later: Load instead of re-indexing
+const db2 = create({ schema })
+const data = JSON.parse(await fs.readFile('db.json'))
+load(db2, data)
+```
+
+<Tip>
+Saving and loading a pre-built index is much faster than re-indexing, especially for large datasets.
+</Tip>
+
+## Search Configuration Tuning
+
+### Typo Tolerance
+
+Balance accuracy and performance:
+
+```javascript
+// ❌ Slower: Maximum tolerance
+const results = await search(db, {
+  term: 'javascrpt',
+  tolerance: 2
+})
+
+// ✅ Faster: Minimal tolerance
+const results = await search(db, {
+  term: 'javascrpt',
+  tolerance: 1  // Usually sufficient
+})
+
+// ✅ Fastest: Exact match only
+const results = await search(db, {
+  term: 'javascript',
+  exact: true
+})
+```
+
+### BM25 Relevance
+
+Fine-tune BM25 parameters for your content:
+
+```javascript
+const results = await search(db, {
+  term: 'search query',
+  relevance: {
+    k: 1.2,  // Term frequency saturation (default: 1.2)
+    b: 0.75, // Length normalization (default: 0.75)
+    d: 0.5   // Document frequency scaling (default: 0.5)
+  }
+})
+```
+
+### Boost Important Fields
+
+```javascript
+const results = await search(db, {
+  term: 'laptop',
+  boost: {
+    title: 2.0,        // Title matches are 2x more important
+    description: 1.0,  // Normal weight
+    tags: 1.5         // Tags are 1.5x more important
+  }
+})
+```
+
+## Vector Search Optimization
+
+### Similarity Threshold
+
+Set appropriate similarity thresholds:
+
+```javascript
+const results = await search(db, {
+  mode: 'vector',
+  vector: {
+    value: queryEmbedding,
+    property: 'embedding'
+  },
+  similarity: 0.8,  // Only return results with 80%+ similarity
+  limit: 10
+})
+```
+
+<Info>
+Higher similarity thresholds (0.85-0.95) = fewer, more relevant results. Lower thresholds (0.6-0.75) = more results, potentially less relevant.
+</Info>
+
+### Don't Return Vectors
+
+```javascript
+const results = await search(db, {
+  mode: 'vector',
+  vector: { value: embedding, property: 'embedding' },
+  includeVectors: false,  // ✅ Much smaller response size
+  limit: 20
+})
+```
+
+Excluding vectors from results dramatically reduces response size since embeddings can be hundreds of numbers.
+
+## Hybrid Search Strategy
+
+```javascript
+const results = await search(db, {
+  mode: 'hybrid',
+  term: 'noise cancelling headphones',
+  vector: {
+    value: embedQuery('noise cancelling headphones'),
+    property: 'embedding'
+  },
+  hybrid: {
+    // Tune the fusion weight
+    alpha: 0.5  // 0.5 = balanced, 0.7 = favor full-text, 0.3 = favor vector
+  }
+})
+```
+
+<Steps>
+  <Step title="Start with alpha = 0.5">
+    Balanced approach works for most use cases
+  </Step>
+  <Step title="Measure query performance">
+    Test your actual queries and track response times
+  </Step>
+  <Step title="Adjust based on content">
+    More structured data → higher alpha (favor full-text)
+    
+    More semantic data → lower alpha (favor vector)
+  </Step>
+</Steps>
+
+## Runtime Performance Monitoring
+
+### Measure Search Time
+
+```javascript
+const results = await search(db, { term: 'query' })
+
+console.log('Search time:', results.elapsed.formatted)  // e.g., "21μs"
+console.log('Results found:', results.count)
+```
+
+### Profile Different Strategies
+
+```javascript
+const strategies = [
+  { tolerance: 0, boost: {} },
+  { tolerance: 1, boost: { title: 2 } },
+  { tolerance: 2, boost: { title: 3, body: 1 } }
+]
+
+for (const strategy of strategies) {
+  const start = performance.now()
+  const results = await search(db, { term: 'test', ...strategy })
+  const elapsed = performance.now() - start
+  console.log(`Strategy ${strategy.tolerance}: ${elapsed}ms, ${results.count} results`)
+}
+```
+
+## Environment-Specific Optimizations
+
+<Accordion title="Browser Optimization">
+```javascript
+// Use smaller indexes for browser deployment
+const db = create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    // Minimal schema for client-side search
+  }
+})
+
+// Load pre-built index from CDN
+const response = await fetch('/search-index.json')
+const data = await response.json()
+load(db, data)
+```
+</Accordion>
+
+<Accordion title="Node.js Optimization">
+```javascript
+// Leverage more memory and parallel processing
+import { Worker } from 'worker_threads'
+
+// Create multiple database instances for parallel searches
+const workers = Array.from({ length: 4 }, () => new Worker('./search-worker.js'))
+
+// Distribute search queries across workers
+function parallelSearch(queries) {
+  return Promise.all(
+    queries.map((query, i) => 
+      sendToWorker(workers[i % workers.length], query)
+    )
+  )
+}
+```
+</Accordion>
+
+<Accordion title="Edge Runtime Optimization">
+```javascript
+// Optimize for edge function constraints
+const db = create({ schema })
+
+// Use cached pre-built index
+const cached = await cache.get('search-index')
+if (cached) {
+  load(db, cached)
+} else {
+  // Build and cache
+  await insertMultiple(db, documents)
+  const serialized = save(db)
+  await cache.set('search-index', serialized, { ttl: 3600 })
+}
+
+return search(db, params)
+```
+</Accordion>
+
+## Performance Checklist
+
+<CardGroup cols={2}>
+  <Card title="✅ Use insertMultiple" icon="check">
+    Batch insertions for 10-100x faster indexing
+  </Card>
+  <Card title="✅ Limit results" icon="check">
+    Keep limit under 100 for fast responses
+  </Card>
+  <Card title="✅ Optimize schema" icon="check">
+    Only index searchable fields
+  </Card>
+  <Card title="✅ Set reasonable tolerance" icon="check">
+    Tolerance of 1 is usually sufficient
+  </Card>
+  <Card title="✅ Use property selection" icon="check">
+    Return only needed fields
+  </Card>
+  <Card title="✅ Exclude vectors" icon="check">
+    Set includeVectors: false in responses
+  </Card>
+  <Card title="✅ Cache serialized DB" icon="check">
+    Load pre-built indexes when possible
+  </Card>
+  <Card title="✅ Monitor performance" icon="check">
+    Track elapsed times and optimize
+  </Card>
+</CardGroup>
+
+## Benchmarking Your Setup
+
+```javascript
+import { create, insertMultiple, search } from '@orama/orama'
+
+async function benchmark() {
+  const db = create({ schema: { title: 'string', body: 'string' } })
+  
+  // Indexing benchmark
+  const docs = Array.from({ length: 10000 }, (_, i) => ({
+    title: `Document ${i}`,
+    body: `This is the body content of document ${i}`
+  }))
+  
+  const indexStart = performance.now()
+  await insertMultiple(db, docs, 1000)
+  const indexTime = performance.now() - indexStart
+  console.log(`Indexed 10k docs in ${indexTime.toFixed(2)}ms`)
+  
+  // Search benchmark
+  const searchStart = performance.now()
+  const results = await search(db, { term: 'document', limit: 20 })
+  const searchTime = performance.now() - searchStart
+  console.log(`Search completed in ${searchTime.toFixed(2)}ms`)
+  console.log(`Found ${results.count} results`)
+}
+
+benchmark()
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deployment Guide" icon="rocket" href="/guides/deployment">
+    Deploy your optimized Orama instance
+  </Card>
+  <Card title="Plugin System" icon="puzzle-piece" href="/plugins/overview">
+    Extend Orama with performance plugins
+  </Card>
+  <Card title="Vector Search" icon="brain" href="/search/vector-search">
+    Optimize vector search performance
+  </Card>
+  <Card title="Data Persistence" icon="floppy-disk" href="/plugins/data-persistence">
+    Implement efficient caching strategies
+  </Card>
+</CardGroup>

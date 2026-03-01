@@ -1,0 +1,590 @@
+---
+title: 'ParseDoc Plugin'
+description: 'Parse and index HTML and Markdown documentation files into Orama'
+icon: 'file-code'
+---
+
+## Overview
+
+The ParseDoc Plugin helps you automatically parse and index HTML and Markdown documentation files into Orama. It's perfect for building documentation search, knowledge bases, and content sites.
+
+## Installation
+
+```bash
+npm install @orama/plugin-parsedoc
+```
+
+<Note>
+  This plugin is designed for Node.js environments and requires file system access.
+</Note>
+
+## Features
+
+- **Multi-Format Support**: Parse HTML and Markdown files
+- **Glob Pattern Matching**: Index multiple files at once
+- **Content Transformation**: Apply custom transformations during parsing
+- **Merge Strategies**: Control how content is split and indexed
+- **Path Tracking**: Maintain document structure and hierarchy
+
+## Quick Start
+
+### Basic Usage
+
+```javascript
+import { create } from '@orama/orama'
+import { populateFromGlob, defaultHtmlSchema } from '@orama/plugin-parsedoc'
+
+// Create database with default schema
+const db = await create({
+  schema: defaultHtmlSchema
+})
+
+// Index all markdown files in docs directory
+await populateFromGlob(db, 'docs/**/*.md')
+
+// Search the documentation
+const results = await search(db, {
+  term: 'installation'
+})
+```
+
+### Index HTML Files
+
+```javascript
+import { populateFromGlob } from '@orama/plugin-parsedoc'
+
+const db = await create({
+  schema: defaultHtmlSchema
+})
+
+// Index HTML files
+await populateFromGlob(db, 'dist/**/*.html')
+```
+
+## Default Schema
+
+The plugin provides a default schema optimized for documentation:
+
+```javascript
+export const defaultHtmlSchema = {
+  type: 'string',      // HTML element type (h1, h2, p, etc.)
+  content: 'string',   // Text content of the element
+  path: 'string'       // Path to the element in the document
+} as const
+```
+
+<Info>
+  You can use this schema as-is or extend it with your own properties.
+</Info>
+
+## API Reference
+
+### populateFromGlob()
+
+Index multiple files using glob patterns.
+
+```typescript
+async function populateFromGlob<T extends AnyOrama>(
+  db: T,
+  pattern: string,
+  options?: PopulateFromGlobOptions
+): Promise<void>
+```
+
+<ParamField path="db" type="AnyOrama" required>
+  The Orama instance to populate
+</ParamField>
+
+<ParamField path="pattern" type="string" required>
+  Glob pattern to match files (e.g., `'docs/**/*.md'`)
+</ParamField>
+
+<ParamField path="options" type="object">
+  Optional configuration
+  
+  <Expandable title="properties">
+    <ParamField path="transformFn" type="TransformFn">
+      Custom transformation function for nodes
+    </ParamField>
+    
+    <ParamField path="mergeStrategy" type="MergeStrategy" default="merge">
+      How to handle content merging: `'merge'`, `'split'`, or `'both'`
+    </ParamField>
+    
+    <ParamField path="context" type="object">
+      Custom context object passed to transform functions
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### populate()
+
+Index content from a buffer or string.
+
+```typescript
+async function populate<T extends AnyOrama>(
+  db: T,
+  data: Buffer | string,
+  fileType: 'html' | 'md',
+  options?: PopulateOptions
+): Promise<string[]>
+```
+
+### parseFile()
+
+Parse a file and return structured records without inserting.
+
+```typescript
+async function parseFile(
+  data: Buffer | string,
+  fileType: 'html' | 'md',
+  options?: PopulateOptions
+): Promise<DefaultSchemaElement[]>
+```
+
+## Merge Strategies
+
+Control how content is split and indexed:
+
+### Merge Strategy (Default)
+
+Combines adjacent elements of the same type into a single document.
+
+```javascript
+await populateFromGlob(db, 'docs/**/*.md', {
+  mergeStrategy: 'merge'
+})
+
+// Result: Fewer, larger documents
+// {
+//   type: 'p',
+//   content: 'First paragraph. Second paragraph. Third paragraph.',
+//   path: 'docs/guide.md/root[0].body[0].p[0]'
+// }
+```
+
+**Best for:**
+- General documentation search
+- Reducing total document count
+- When context matters
+
+### Split Strategy
+
+Creates a separate document for each element.
+
+```javascript
+await populateFromGlob(db, 'docs/**/*.md', {
+  mergeStrategy: 'split'
+})
+
+// Result: More, smaller documents
+// [
+//   { type: 'p', content: 'First paragraph.', path: '...' },
+//   { type: 'p', content: 'Second paragraph.', path: '...' },
+//   { type: 'p', content: 'Third paragraph.', path: '...' }
+// ]
+```
+
+**Best for:**
+- Precise matching
+- When each element is independent
+- Highlighting specific sections
+
+### Both Strategy
+
+Creates both merged and split documents.
+
+```javascript
+await populateFromGlob(db, 'docs/**/*.md', {
+  mergeStrategy: 'both'
+})
+```
+
+**Best for:**
+- Maximum flexibility
+- When you need both precision and context
+- Advanced use cases
+
+## Transform Functions
+
+Apply custom transformations during parsing:
+
+```typescript
+type TransformFn = (
+  node: NodeContent,
+  context: PopulateFnContext
+) => NodeContent
+
+interface NodeContent {
+  tag: string                    // HTML tag name
+  content: string                // Text content
+  raw: string                    // Raw HTML
+  properties?: Properties        // HTML attributes
+  additionalProperties?: Properties  // Custom properties to add
+}
+```
+
+### Example: Add Custom Properties
+
+```javascript
+await populateFromGlob(db, 'docs/**/*.md', {
+  transformFn: (node, context) => {
+    // Add section level based on heading tag
+    if (node.tag.match(/^h[1-6]$/)) {
+      const level = parseInt(node.tag[1])
+      node.additionalProperties = {
+        ...node.additionalProperties,
+        'data-level': level,
+        'data-section': true
+      }
+    }
+    
+    return node
+  }
+})
+```
+
+### Example: Filter Content
+
+```javascript
+await populateFromGlob(db, 'docs/**/*.html', {
+  transformFn: (node, context) => {
+    // Remove code blocks from indexing
+    if (node.tag === 'pre' || node.tag === 'code') {
+      node.content = '' // Empty content won't be indexed
+    }
+    
+    return node
+  }
+})
+```
+
+### Example: Modify Content
+
+```javascript
+await populateFromGlob(db, 'docs/**/*.md', {
+  transformFn: (node, context) => {
+    // Normalize content
+    node.content = node.content
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+    
+    return node
+  }
+})
+```
+
+### Example: Context Tracking
+
+```javascript
+const context = {
+  currentFile: '',
+  sectionStack: []
+}
+
+await populateFromGlob(db, 'docs/**/*.md', {
+  context,
+  transformFn: (node, ctx) => {
+    // Track current section
+    if (node.tag === 'h1') {
+      ctx.currentSection = node.content
+      node.additionalProperties = {
+        section: ctx.currentSection
+      }
+    }
+    
+    return node
+  }
+})
+```
+
+## Advanced Usage
+
+### Custom Schema
+
+```javascript
+import { create } from '@orama/orama'
+import { populateFromGlob } from '@orama/plugin-parsedoc'
+
+const db = await create({
+  schema: {
+    type: 'string',
+    content: 'string',
+    path: 'string',
+    section: 'string',    // Custom field
+    level: 'number',      // Custom field
+    keywords: 'string[]'  // Custom field
+  }
+})
+
+await populateFromGlob(db, 'docs/**/*.md', {
+  transformFn: (node, context) => {
+    node.additionalProperties = {
+      section: context.currentSection || 'Introduction',
+      level: node.tag.match(/^h([1-6])$/))?.[1] || 0,
+      keywords: extractKeywords(node.content)
+    }
+    return node
+  }
+})
+```
+
+### Multi-Directory Indexing
+
+```javascript
+const db = await create({ schema: defaultHtmlSchema })
+
+// Index multiple directories
+await populateFromGlob(db, 'docs/**/*.md')
+await populateFromGlob(db, 'guides/**/*.md')
+await populateFromGlob(db, 'api/**/*.html')
+
+console.log(`Indexed ${await db.documentsStore.count(db.data.docs)} documents`)
+```
+
+### With Path-Based Filtering
+
+```javascript
+await populateFromGlob(db, 'docs/**/*.md')
+
+// Search within specific sections using path
+const results = await search(db, {
+  term: 'installation',
+  where: {
+    path: {
+      // Path contains "getting-started"
+      contains: 'getting-started'
+    }
+  }
+})
+```
+
+## Real-World Examples
+
+### Documentation Site Search
+
+```javascript
+import { create, search } from '@orama/orama'
+import { populateFromGlob, defaultHtmlSchema } from '@orama/plugin-parsedoc'
+
+const db = await create({
+  schema: {
+    ...defaultHtmlSchema,
+    category: 'string',
+    priority: 'number'
+  }
+})
+
+const categories = {
+  'getting-started': { priority: 10, category: 'Getting Started' },
+  'guides': { priority: 8, category: 'Guides' },
+  'api': { priority: 6, category: 'API Reference' }
+}
+
+await populateFromGlob(db, 'docs/**/*.md', {
+  transformFn: (node, context) => {
+    // Determine category from file path
+    const pathMatch = context.basePath?.match(/(getting-started|guides|api)/)
+    const catKey = pathMatch?.[1] || 'guides'
+    
+    node.additionalProperties = {
+      category: categories[catKey].category,
+      priority: categories[catKey].priority
+    }
+    
+    return node
+  }
+})
+
+// Search with category faceting
+const results = await search(db, {
+  term: 'search',
+  facets: {
+    category: true
+  }
+})
+```
+
+### Blog Post Indexing
+
+```javascript
+import matter from 'gray-matter'
+
+const db = await create({
+  schema: {
+    type: 'string',
+    content: 'string',
+    path: 'string',
+    title: 'string',
+    date: 'string',
+    author: 'string',
+    tags: 'string[]'
+  }
+})
+
+await populateFromGlob(db, 'blog/**/*.md', {
+  context: {},
+  transformFn: (node, context) => {
+    // Extract frontmatter from markdown files
+    if (!context.frontmatter && node.raw) {
+      try {
+        const { data } = matter(node.raw)
+        context.frontmatter = data
+      } catch (e) {
+        context.frontmatter = {}
+      }
+    }
+    
+    // Add frontmatter fields to all nodes
+    node.additionalProperties = {
+      title: context.frontmatter?.title || '',
+      date: context.frontmatter?.date || '',
+      author: context.frontmatter?.author || '',
+      tags: context.frontmatter?.tags || []
+    }
+    
+    return node
+  }
+})
+```
+
+## How It Works
+
+The ParseDoc plugin uses unified/rehype to parse documents:
+
+At `/home/daytona/workspace/source/packages/plugin-parsedoc/src/index.ts:64-90`:
+
+```typescript
+export const parseFile = async (
+  data: Buffer | string,
+  fileType: FileType,
+  options?: PopulateOptions
+): Promise<DefaultSchemaElement[]> => {
+  const records: DefaultSchemaElement[] = []
+  
+  switch (fileType) {
+    case 'md':
+      const tree = unified().use(remarkParse).parse(data)
+      await unified()
+        .use(remarkRehype)
+        .use(rehypeDocument)
+        .use(rehypePresetMinify)
+        .use(rehypeOrama, records, options)
+        .run(tree)
+      break
+    case 'html':
+      await rehype()
+        .use(rehypePresetMinify)
+        .use(rehypeOrama, records, options)
+        .process(data)
+      break
+  }
+  
+  return records
+}
+```
+
+## Performance Tips
+
+### Use Appropriate Merge Strategy
+
+```javascript
+// For large documentation sites, use 'merge' to reduce document count
+await populateFromGlob(db, 'docs/**/*.md', {
+  mergeStrategy: 'merge'  // Fewer documents, faster search
+})
+```
+
+### Filter Unnecessary Content
+
+```javascript
+await populateFromGlob(db, 'docs/**/*.html', {
+  transformFn: (node) => {
+    // Skip navigation, footer, etc.
+    if (node.properties?.class?.includes('nav') ||
+        node.properties?.class?.includes('footer')) {
+      node.content = ''
+    }
+    return node
+  }
+})
+```
+
+### Batch Processing
+
+```javascript
+import glob from 'glob'
+import { readFile } from 'fs/promises'
+import { populate } from '@orama/plugin-parsedoc'
+
+const files = glob.sync('docs/**/*.md')
+const batchSize = 100
+
+for (let i = 0; i < files.length; i += batchSize) {
+  const batch = files.slice(i, i + batchSize)
+  await Promise.all(
+    batch.map(async (file) => {
+      const data = await readFile(file)
+      await populate(db, data, 'md')
+    })
+  )
+  console.log(`Processed ${Math.min(i + batchSize, files.length)} of ${files.length} files`)
+}
+```
+
+## Troubleshooting
+
+### No Documents Indexed
+
+Check your glob pattern:
+
+```javascript
+import glob from 'glob'
+
+// Test glob pattern
+const files = glob.sync('docs/**/*.md')
+console.log('Found files:', files.length)
+```
+
+### Parsing Errors
+
+Ensure valid HTML/Markdown:
+
+```javascript
+import { parseFile } from '@orama/plugin-parsedoc'
+
+try {
+  const records = await parseFile(data, 'md')
+  console.log('Parsed records:', records.length)
+} catch (error) {
+  console.error('Parsing failed:', error)
+}
+```
+
+### Memory Issues with Large Sites
+
+Process files in batches or increase Node.js memory:
+
+```bash
+node --max-old-space-size=4096 index.js
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Search Guide" icon="magnifying-glass" href="/open-source/usage/search">
+    Learn how to search indexed content
+  </Card>
+  
+  <Card title="Data Persistence" icon="database" href="/plugins/data-persistence">
+    Save and restore your indexed documentation
+  </Card>
+  
+  <Card title="Custom Schema" icon="table" href="/open-source/usage/create/schema">
+    Design custom schemas for your content
+  </Card>
+  
+  <Card title="Analytics" icon="chart-line" href="/plugins/analytics">
+    Track documentation search analytics
+  </Card>
+</CardGroup>

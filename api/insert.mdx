@@ -1,0 +1,168 @@
+---
+title: insert()
+description: Insert a single document into an Orama database instance
+---
+
+Inserts a single document into the Orama database. The document must conform to the schema defined during database creation.
+
+## Function Signature
+
+```typescript
+function insert<T extends AnyOrama>(
+  orama: T,
+  doc: PartialSchemaDeep<TypedDocument<T>>,
+  language?: string,
+  skipHooks?: boolean,
+  options?: InsertOptions
+): string | Promise<string>
+```
+
+## Parameters
+
+<ParamField path="orama" type="Orama" required>
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="doc" type="PartialSchemaDeep<TypedDocument<T>>" required>
+  The document to insert. Must match the database schema structure.
+</ParamField>
+
+<ParamField path="language" type="string">
+  Optional language for tokenization. If not specified, uses the default language from the database configuration.
+</ParamField>
+
+<ParamField path="skipHooks" type="boolean" default="false">
+  If true, skips executing beforeInsert and afterInsert hooks.
+</ParamField>
+
+<ParamField path="options" type="InsertOptions">
+  Additional insertion options.
+  
+  <Expandable title="InsertOptions properties">
+    <ParamField path="avlRebalanceThreshold" type="number">
+      Threshold for AVL tree rebalancing operations.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Returns
+
+<ResponseField name="id" type="string | Promise<string>">
+  The ID of the inserted document. Returns a Promise if async operations are required.
+</ResponseField>
+
+## Behavior
+
+- Validates the document against the schema before insertion
+- Automatically determines whether to run synchronously or asynchronously based on hooks and index configuration
+- Throws an error if the document already exists with the same ID
+- Throws an error if the document ID is not a string
+- Indexes all searchable properties defined in the schema
+- Updates sorting structures for sortable properties
+
+## Errors
+
+The function throws errors in the following cases:
+
+- `SCHEMA_VALIDATION_FAILURE`: Document doesn't match the schema
+- `DOCUMENT_ID_MUST_BE_STRING`: Document ID is not a string type
+- `DOCUMENT_ALREADY_EXISTS`: A document with the same ID already exists
+- `INVALID_DOCUMENT_PROPERTY`: Property type doesn't match schema definition
+
+## Examples
+
+### Basic Insert
+
+```typescript
+import { create, insert } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    description: 'string',
+    price: 'number'
+  }
+})
+
+const id = await insert(db, {
+  id: 'product-1',
+  title: 'Wireless Headphones',
+  description: 'High-quality noise-cancelling headphones',
+  price: 199.99
+})
+
+console.log(id) // 'product-1'
+```
+
+### Insert with Language
+
+```typescript
+const id = await insert(db, {
+  id: 'product-2',
+  title: 'Écouteurs sans fil',
+  description: 'Écouteurs de haute qualité avec réduction de bruit',
+  price: 199.99
+}, 'french')
+```
+
+### Insert with Custom Options
+
+```typescript
+const id = await insert(db, {
+  id: 'product-3',
+  title: 'Bluetooth Speaker',
+  description: 'Portable waterproof speaker',
+  price: 79.99
+}, undefined, false, {
+  avlRebalanceThreshold: 1000
+})
+```
+
+### Insert with Nested Schema
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    category: {
+      primary: 'string',
+      secondary: 'string'
+    }
+  }
+})
+
+const id = await insert(db, {
+  id: 'product-4',
+  title: 'Smart Watch',
+  category: {
+    primary: 'Electronics',
+    secondary: 'Wearables'
+  }
+})
+```
+
+### Insert Vector Embeddings
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    embedding: 'vector[384]'
+  }
+})
+
+const id = await insert(db, {
+  id: 'doc-1',
+  title: 'Machine Learning Guide',
+  embedding: new Array(384).fill(0).map(() => Math.random())
+})
+```
+
+## See Also
+
+- [insertMultiple()](/api/insert-multiple) - Insert multiple documents in batch
+- [update()](/api/update) - Update an existing document
+- [upsert()](/api/upsert) - Insert or update a document

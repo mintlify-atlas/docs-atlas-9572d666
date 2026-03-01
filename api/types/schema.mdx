@@ -1,0 +1,356 @@
+---
+title: Schema Types
+description: Type definitions for Orama database schemas
+---
+
+## Overview
+
+Orama uses TypeScript types to define and validate database schemas. The schema system provides type safety and enables proper type inference for documents and search results.
+
+## Core Schema Types
+
+### AnySchema
+
+A flexible schema definition that supports nested objects.
+
+```typescript
+type AnySchema = {
+  [key: PropertyKey]: SearchableType | AnySchema
+}
+```
+
+#### Example
+
+```typescript
+const schema = {
+  title: 'string',
+  price: 'number',
+  inStock: 'boolean',
+  tags: 'string[]',
+  metadata: {
+    category: 'string',
+    rating: 'number'
+  }
+} satisfies AnySchema;
+```
+
+### Schema
+
+Transforms a schema definition into the corresponding document type.
+
+```typescript
+type Schema<TSchema> = TSchema extends AnySchema
+  ? InternalTypedDocument<{
+      -readonly [Key in keyof TSchema]: SchemaTypes<TSchema[Key]>
+    }>
+  : never
+```
+
+#### Example
+
+```typescript
+const mySchema = {
+  title: 'string',
+  price: 'number'
+} as const;
+
+type MyDocument = Schema<typeof mySchema>;
+// Result: { id: string, title: string, price: number }
+```
+
+## Searchable Types
+
+### SearchableType
+
+Union of all valid schema property types.
+
+```typescript
+type SearchableType = ScalarSearchableType | ArraySearchableType
+```
+
+### ScalarSearchableType
+
+Single-value searchable types.
+
+```typescript
+type ScalarSearchableType = 'string' | 'number' | 'boolean' | 'enum' | 'geopoint'
+```
+
+### ArraySearchableType
+
+Array-based searchable types.
+
+```typescript
+type ArraySearchableType = 'string[]' | 'number[]' | 'boolean[]' | 'enum[]' | Vector
+```
+
+### Vector
+
+Vector type for embedding-based search.
+
+```typescript
+type Vector = `vector[${number}]`
+```
+
+#### Example
+
+```typescript
+const schema = {
+  title: 'string',
+  embedding: 'vector[384]' // 384-dimensional vector
+};
+```
+
+## Value Types
+
+### SearchableValue
+
+Union of all valid searchable values.
+
+```typescript
+type SearchableValue = ScalarSearchableValue | ArraySearchableValue
+```
+
+### ScalarSearchableValue
+
+```typescript
+type ScalarSearchableValue = string | number | boolean | Point
+```
+
+### ArraySearchableValue
+
+```typescript
+type ArraySearchableValue = string[] | number[] | boolean[] | VectorType
+```
+
+### Point
+
+Geopoint representation for geosearch.
+
+```typescript
+type Point = {
+  lat: number
+  lon: number
+}
+```
+
+#### Example
+
+```typescript
+const location: Point = {
+  lat: 40.7128,
+  lon: -74.0060
+};
+```
+
+## Document Types
+
+### AnyDocument
+
+Generic document type with an ID field.
+
+```typescript
+type AnyDocument = InternalTypedDocument<any>
+```
+
+### InternalTypedDocument
+
+Typed document with required ID field.
+
+```typescript
+type InternalTypedDocument<TSchema extends object> = 
+  { id: DocumentID } & TSchema & { [otherKeys: PropertyKey]: any }
+```
+
+### TypedDocument
+
+Extracts the document type from an Orama instance.
+
+```typescript
+type TypedDocument<T extends AnyOrama> = T['typeSchema']
+```
+
+#### Example
+
+```typescript
+import { create } from '@orama/orama';
+
+const db = await create({
+  schema: {
+    title: 'string',
+    price: 'number'
+  }
+});
+
+type MyDoc = TypedDocument<typeof db>;
+// Result: { id: string, title: string, price: number }
+```
+
+## Type Transformation
+
+### SchemaTypes
+
+Maps schema type strings to TypeScript types.
+
+```typescript
+type SchemaTypes<Value> = 
+  Value extends 'string' ? string :
+  Value extends 'string[]' ? string[] :
+  Value extends 'boolean' ? boolean :
+  Value extends 'boolean[]' ? boolean[] :
+  Value extends 'number' ? number :
+  Value extends 'number[]' ? number[] :
+  Value extends 'enum' ? string | number :
+  Value extends 'enum[]' ? (string | number)[] :
+  Value extends 'geopoint' ? Point :
+  Value extends `vector[${number}]` ? number[] :
+  Value extends object ? { [Key in keyof Value]: SchemaTypes<Value[Key]> } :
+  never
+```
+
+#### Example
+
+```typescript
+type StringType = SchemaTypes<'string'>; // string
+type NumberArrayType = SchemaTypes<'number[]'>; // number[]
+type VectorType = SchemaTypes<'vector[128]'>; // number[]
+type EnumType = SchemaTypes<'enum'>; // string | number
+```
+
+## Partial Schema Types
+
+### PartialSchemaDeep
+
+Creates a deeply partial version of a schema, useful for updates.
+
+```typescript
+type PartialSchemaDeep<T> = {
+  [K in keyof T]?: PartialSchemaDeepObject<T[K]>
+}
+```
+
+### PartialSchemaDeepObject
+
+```typescript
+type PartialSchemaDeepObject<T> = T extends object
+  ? { [K in keyof T]?: T[K] }
+  : T
+```
+
+#### Example
+
+```typescript
+type FullSchema = {
+  title: string
+  metadata: {
+    category: string
+    tags: string[]
+  }
+}
+
+type PartialSchema = PartialSchemaDeep<FullSchema>;
+// All properties optional:
+// {
+//   title?: string
+//   metadata?: {
+//     category?: string
+//     tags?: string[]
+//   }
+// }
+```
+
+## Flattened Schema Types
+
+### Flatten
+
+Flattens nested schema properties into dot-notation keys.
+
+```typescript
+type Flatten<T extends object> = /* internal type */
+```
+
+### FlattenSchema
+
+Flattens an Orama schema.
+
+```typescript
+type FlattenSchema<T extends AnyOrama> = Flatten<T['schema']>
+```
+
+### FlattenSchemaProperty
+
+Extracts flattened property keys.
+
+```typescript
+type FlattenSchemaProperty<T extends AnyOrama> = 
+  T['schema'] extends object ? keyof FlattenSchema<T> : string
+```
+
+#### Example
+
+```typescript
+const db = await create({
+  schema: {
+    title: 'string',
+    metadata: {
+      category: 'string',
+      rating: 'number'
+    }
+  }
+});
+
+type FlatKeys = FlattenSchemaProperty<typeof db>;
+// 'title' | 'metadata.category' | 'metadata.rating'
+```
+
+## Complete Schema Example
+
+```typescript
+import { create, AnySchema, Schema } from '@orama/orama';
+
+// Define schema
+const productSchema = {
+  id: 'string',
+  title: 'string',
+  description: 'string',
+  price: 'number',
+  inStock: 'boolean',
+  tags: 'string[]',
+  ratings: 'number[]',
+  category: 'enum',
+  location: 'geopoint',
+  embedding: 'vector[384]',
+  metadata: {
+    brand: 'string',
+    sku: 'string',
+    weight: 'number'
+  }
+} satisfies AnySchema;
+
+// Create database with typed schema
+const db = await create({
+  schema: productSchema
+});
+
+// TypeScript infers document type
+type Product = Schema<typeof productSchema>;
+
+// Insert with full type safety
+await db.insert({
+  id: '1',
+  title: 'Laptop',
+  description: 'High-performance laptop',
+  price: 999.99,
+  inStock: true,
+  tags: ['electronics', 'computers'],
+  ratings: [4.5, 4.8, 5.0],
+  category: 'electronics',
+  location: { lat: 40.7128, lon: -74.0060 },
+  embedding: new Array(384).fill(0),
+  metadata: {
+    brand: 'TechCorp',
+    sku: 'LAP-001',
+    weight: 2.5
+  }
+});
+```

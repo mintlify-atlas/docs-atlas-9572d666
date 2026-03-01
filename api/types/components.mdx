@@ -1,0 +1,422 @@
+---
+title: Components Types
+description: Type definitions for Orama component hooks and callbacks
+---
+
+## Overview
+
+Orama provides a comprehensive hook system that allows you to intercept and modify behavior at various points in the document lifecycle and search process. Components include callback hooks and core component implementations.
+
+## Callback Hooks
+
+### SingleCallbackComponent
+
+Callback for operations on a single document.
+
+```typescript
+type SingleCallbackComponent<T extends AnyOrama> = (
+  orama: T,
+  id: string,
+  doc?: TypedDocument<T>
+) => SyncOrAsyncValue
+```
+
+<ParamField path="orama" type="T extends AnyOrama">
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="id" type="string">
+  The document ID.
+</ParamField>
+
+<ParamField path="doc" type="TypedDocument<T>" optional>
+  The document (may not have correct type, cast if needed).
+</ParamField>
+
+<ResponseField name="returns" type="SyncOrAsyncValue">
+  Can return void or a Promise.
+</ResponseField>
+
+#### Used in:
+- `beforeInsert` / `afterInsert`
+- `beforeRemove` / `afterRemove`
+- `beforeUpdate` / `afterUpdate`
+- `beforeUpsert` / `afterUpsert`
+
+### MultipleCallbackComponent
+
+Callback for bulk operations on multiple documents.
+
+```typescript
+type MultipleCallbackComponent<T extends AnyOrama> = (
+  orama: T,
+  doc: TypedDocument<T>[] | string[]
+) => SyncOrAsyncValue
+```
+
+<ParamField path="orama" type="T extends AnyOrama">
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="doc" type="TypedDocument<T>[] | string[]">
+  Array of documents or document IDs.
+</ParamField>
+
+#### Used in:
+- `beforeInsertMultiple` / `afterInsertMultiple`
+- `beforeRemoveMultiple` / `afterRemoveMultiple`
+- `beforeUpdateMultiple` / `afterUpdateMultiple`
+- `beforeUpsertMultiple` / `afterUpsertMultiple`
+
+### BeforeSearch
+
+Callback before executing a search.
+
+```typescript
+type BeforeSearch<T extends AnyOrama> = (
+  db: T,
+  params: SearchParams<T>,
+  language: string | undefined
+) => SyncOrAsyncValue
+```
+
+<ParamField path="db" type="T extends AnyOrama">
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="params" type="SearchParams<T>">
+  The search parameters.
+</ParamField>
+
+<ParamField path="language" type="string | undefined">
+  The search language, if specified.
+</ParamField>
+
+### AfterSearch
+
+Callback after search execution.
+
+```typescript
+type AfterSearch<T extends AnyOrama, ResultDocument = TypedDocument<T>> = (
+  db: T,
+  params: SearchParams<T, ResultDocument>,
+  language: string | undefined,
+  results: Results<ResultDocument>
+) => SyncOrAsyncValue
+```
+
+<ParamField path="db" type="T extends AnyOrama">
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="params" type="SearchParams<T, ResultDocument>">
+  The search parameters.
+</ParamField>
+
+<ParamField path="language" type="string | undefined">
+  The search language.
+</ParamField>
+
+<ParamField path="results" type="Results<ResultDocument>">
+  The search results.
+</ParamField>
+
+### AfterCreate
+
+Callback after database creation.
+
+```typescript
+type AfterCreate<T extends AnyOrama> = (db: T) => SyncOrAsyncValue
+```
+
+<ParamField path="db" type="T extends AnyOrama">
+  The newly created Orama database instance.
+</ParamField>
+
+## Hook Configuration
+
+### SingleOrArrayCallbackComponents
+
+Configuration interface for all available hooks (can be single function or array).
+
+```typescript
+interface SingleOrArrayCallbackComponents<T extends AnyOrama> {
+  beforeInsert: SingleOrArray<SingleCallbackComponent<T>>
+  afterInsert: SingleOrArray<SingleCallbackComponent<T>>
+  beforeRemove: SingleOrArray<SingleCallbackComponent<T>>
+  afterRemove: SingleOrArray<SingleCallbackComponent<T>>
+  beforeUpdate: SingleOrArray<SingleCallbackComponent<T>>
+  afterUpdate: SingleOrArray<SingleCallbackComponent<T>>
+  beforeUpsert: SingleOrArray<SingleCallbackComponent<T>>
+  afterUpsert: SingleOrArray<SingleCallbackComponent<T>>
+  beforeSearch: SingleOrArray<BeforeSearch<T>>
+  afterSearch: SingleOrArray<AfterSearch<T>>
+  beforeInsertMultiple: SingleOrArray<MultipleCallbackComponent<T>>
+  afterInsertMultiple: SingleOrArray<MultipleCallbackComponent<T>>
+  beforeRemoveMultiple: SingleOrArray<MultipleCallbackComponent<T>>
+  afterRemoveMultiple: SingleOrArray<MultipleCallbackComponent<T>>
+  beforeUpdateMultiple: SingleOrArray<MultipleCallbackComponent<T>>
+  afterUpdateMultiple: SingleOrArray<MultipleCallbackComponent<T>>
+  beforeUpsertMultiple: SingleOrArray<MultipleCallbackComponent<T>>
+  afterUpsertMultiple: SingleOrArray<MultipleCallbackComponent<T>>
+  afterCreate: SingleOrArray<AfterCreate<T>>
+}
+```
+
+### Example: Using Hooks
+
+```typescript
+import { create } from '@orama/orama';
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    createdAt: 'number'
+  },
+  components: {
+    // Single hook
+    beforeInsert: async (orama, id, doc) => {
+      console.log(`Inserting document ${id}`);
+      // Modify document before insertion
+      if (doc) {
+        doc.createdAt = Date.now();
+      }
+    },
+    
+    // Multiple hooks as array
+    afterInsert: [
+      async (orama, id) => {
+        console.log(`Document ${id} inserted`);
+      },
+      async (orama, id, doc) => {
+        // Log to analytics
+        await analytics.track('document_inserted', { id, title: doc?.title });
+      }
+    ],
+    
+    beforeSearch: async (orama, params) => {
+      console.log(`Searching for: ${params.term}`);
+    },
+    
+    afterSearch: async (orama, params, language, results) => {
+      console.log(`Found ${results.count} results in ${results.elapsed.formatted}`);
+    }
+  }
+});
+```
+
+## Object Components
+
+Core components that power Orama's functionality.
+
+### ObjectComponents
+
+```typescript
+interface ObjectComponents<I, D, So, Pi> {
+  tokenizer: Tokenizer | DefaultTokenizerConfig
+  index: I
+  documentsStore: D
+  sorter: So
+  pinning: Pi
+}
+```
+
+<ParamField path="tokenizer" type="Tokenizer | DefaultTokenizerConfig">
+  Tokenizer for text processing.
+  
+  <Expandable title="DefaultTokenizerConfig properties">
+    <ParamField path="language" type="Language">
+      Language for tokenization and stemming.
+    </ParamField>
+    
+    <ParamField path="stemming" type="boolean">
+      Enable stemming. Default: true.
+    </ParamField>
+    
+    <ParamField path="stemmer" type="Stemmer">
+      Custom stemmer function.
+    </ParamField>
+    
+    <ParamField path="stemmerSkipProperties" type="string | string[]">
+      Properties to skip stemming.
+    </ParamField>
+    
+    <ParamField path="tokenizeSkipProperties" type="string | string[]">
+      Properties to skip tokenization.
+    </ParamField>
+    
+    <ParamField path="stopWords" type="boolean | string[] | ((stopWords: string[]) => string[])">
+      Stop words configuration. Can be boolean, array, or function.
+    </ParamField>
+    
+    <ParamField path="allowDuplicates" type="boolean">
+      Allow duplicate tokens.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="index" type="I">
+  Index implementation (IIndex interface).
+</ParamField>
+
+<ParamField path="documentsStore" type="D">
+  Document storage implementation (IDocumentsStore interface).
+</ParamField>
+
+<ParamField path="sorter" type="So">
+  Sorter implementation (ISorter interface).
+</ParamField>
+
+<ParamField path="pinning" type="Pi">
+  Pinning implementation (IPinning interface).
+</ParamField>
+
+### Example: Custom Tokenizer
+
+```typescript
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    code: 'string'
+  },
+  components: {
+    tokenizer: {
+      language: 'english',
+      stemming: true,
+      stemmerSkipProperties: ['code'], // Don't stem code blocks
+      stopWords: true
+    }
+  }
+});
+```
+
+## Function Components
+
+Utility functions for document processing.
+
+### FunctionComponents
+
+```typescript
+interface FunctionComponents<S> {
+  validateSchema(doc: AnyDocument, schema: S): string | undefined
+  getDocumentIndexId(doc: AnyDocument): string
+  getDocumentProperties(doc: AnyDocument, paths: string[]): Record<string, string | number | boolean>
+  formatElapsedTime(number: bigint): number | string | object | ElapsedTime
+}
+```
+
+<ParamField path="validateSchema" type="(doc: AnyDocument, schema: S) => string | undefined">
+  Validates document against schema. Returns error message or undefined.
+</ParamField>
+
+<ParamField path="getDocumentIndexId" type="(doc: AnyDocument) => string">
+  Extracts document ID.
+</ParamField>
+
+<ParamField path="getDocumentProperties" type="(doc: AnyDocument, paths: string[]) => Record<string, SearchableValue>">
+  Extracts specific properties from document.
+</ParamField>
+
+<ParamField path="formatElapsedTime" type="(number: bigint) => ElapsedTime">
+  Formats nanoseconds to readable time.
+</ParamField>
+
+## Complete Components Example
+
+```typescript
+import { create } from '@orama/orama';
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    price: 'number',
+    createdAt: 'number',
+    updatedAt: 'number'
+  },
+  components: {
+    // Tokenizer configuration
+    tokenizer: {
+      language: 'english',
+      stemming: true,
+      stopWords: true
+    },
+    
+    // Document lifecycle hooks
+    beforeInsert: async (orama, id, doc) => {
+      if (doc) {
+        doc.createdAt = Date.now();
+        doc.updatedAt = Date.now();
+      }
+    },
+    
+    afterInsert: [
+      async (orama, id) => {
+        console.log(`Inserted: ${id}`);
+      },
+      async (orama, id, doc) => {
+        await cache.invalidate('products');
+      }
+    ],
+    
+    beforeUpdate: async (orama, id, doc) => {
+      if (doc) {
+        doc.updatedAt = Date.now();
+      }
+    },
+    
+    beforeRemove: async (orama, id) => {
+      console.log(`Removing: ${id}`);
+    },
+    
+    afterRemove: async (orama, id) => {
+      await cache.invalidate(`product:${id}`);
+    },
+    
+    // Search hooks
+    beforeSearch: async (orama, params) => {
+      const start = Date.now();
+      console.log(`Search started: ${params.term}`);
+    },
+    
+    afterSearch: async (orama, params, language, results) => {
+      console.log(`Found ${results.count} results in ${results.elapsed.formatted}`);
+      
+      // Log slow queries
+      if (results.elapsed.raw > 100_000_000) { // 100ms in nanoseconds
+        console.warn(`Slow query detected: ${params.term}`);
+      }
+    },
+    
+    // Database lifecycle
+    afterCreate: async (orama) => {
+      console.log('Database created:', orama.id);
+    }
+  }
+});
+
+// Insert with hooks
+await db.insert({
+  id: '1',
+  title: 'Laptop',
+  description: 'High-performance laptop',
+  price: 999.99
+});
+// Logs: "Inserted: 1"
+// Cache invalidated
+
+// Update with hooks
+await db.update('1', {
+  price: 899.99
+});
+// updatedAt timestamp automatically set
+
+// Search with hooks
+const results = await search(db, {
+  term: 'laptop'
+});
+// Logs: "Search started: laptop"
+// Logs: "Found 1 results in 2ms"
+```

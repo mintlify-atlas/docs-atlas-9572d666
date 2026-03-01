@@ -1,0 +1,300 @@
+---
+title: create()
+description: Create a new Orama database instance
+---
+
+Creates and initializes a new Orama database instance with the specified schema and configuration.
+
+## Function Signature
+
+```typescript
+function create<
+  OramaSchema extends AnySchema,
+  TIndex = IIndex<Index>,
+  TDocumentStore = IDocumentsStore<DocumentsStore>,
+  TSorter = ISorter<Sorter>,
+  TPinning = any
+>({
+  schema,
+  sort,
+  language,
+  components,
+  id,
+  plugins
+}: CreateArguments<OramaSchema, TIndex, TDocumentStore, TSorter, TPinning>): Orama<
+  OramaSchema,
+  TIndex,
+  TDocumentStore,
+  TSorter,
+  TPinning
+>
+```
+
+## Parameters
+
+<ParamField path="schema" type="OramaSchema" required>
+  The schema definition for the database. Defines the structure and types of documents that can be stored.
+  
+  ```typescript
+  {
+    title: 'string',
+    description: 'string',
+    price: 'number',
+    categories: 'string[]',
+    rating: 'number'
+  }
+  ```
+</ParamField>
+
+<ParamField path="sort" type="SorterConfig">
+  Configuration for sorting functionality.
+  
+  <Expandable title="properties">
+    <ParamField path="enabled" type="boolean">
+      Whether sorting is enabled for this database. Default: `true`
+    </ParamField>
+    
+    <ParamField path="unsortableProperties" type="string[]">
+      Array of property names that should not be sortable.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="language" type="string">
+  The language to use for tokenization and stemming. Default: `'english'`
+  
+  Cannot be used together with a custom `tokenizer` in components.
+  
+  Examples: `'english'`, `'spanish'`, `'french'`, `'italian'`, etc.
+</ParamField>
+
+<ParamField path="components" type="Components">
+  Custom components to replace default implementations.
+  
+  <Expandable title="properties">
+    <ParamField path="tokenizer" type="Tokenizer | DefaultTokenizerConfig">
+      Custom tokenizer or tokenizer configuration.
+    </ParamField>
+    
+    <ParamField path="index" type="TIndex">
+      Custom index implementation.
+    </ParamField>
+    
+    <ParamField path="documentsStore" type="TDocumentStore">
+      Custom documents store implementation.
+    </ParamField>
+    
+    <ParamField path="sorter" type="TSorter">
+      Custom sorter implementation.
+    </ParamField>
+    
+    <ParamField path="pinning" type="TPinning">
+      Custom pinning implementation.
+    </ParamField>
+    
+    <ParamField path="getDocumentIndexId" type="(doc: AnyDocument) => string">
+      Custom function to extract document ID.
+    </ParamField>
+    
+    <ParamField path="getDocumentProperties" type="(doc: AnyDocument, paths: string[]) => Record<string, any>">
+      Custom function to extract document properties.
+    </ParamField>
+    
+    <ParamField path="validateSchema" type="(doc: AnyDocument, schema: OramaSchema) => string | undefined">
+      Custom schema validation function.
+    </ParamField>
+    
+    <ParamField path="formatElapsedTime" type="(time: bigint) => ElapsedTime">
+      Custom time formatting function.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="plugins" type="OramaPlugin[]">
+  Array of plugins to extend Orama functionality.
+  
+  Plugins can provide custom components and hooks for various database operations.
+</ParamField>
+
+<ParamField path="id" type="string">
+  Custom ID for the database instance. If not provided, a unique ID will be generated automatically.
+</ParamField>
+
+## Return Value
+
+<ResponseField name="Orama" type="Orama<OramaSchema, TIndex, TDocumentStore, TSorter, TPinning>">
+  A fully initialized Orama database instance ready to accept documents and perform searches.
+  
+  <Expandable title="properties">
+    <ResponseField name="schema" type="OramaSchema">
+      The schema definition for the database.
+    </ResponseField>
+    
+    <ResponseField name="data" type="object">
+      Internal data structures for index, documents, sorting, and pinning.
+    </ResponseField>
+    
+    <ResponseField name="tokenizer" type="Tokenizer">
+      The tokenizer instance used for text processing.
+    </ResponseField>
+    
+    <ResponseField name="index" type="IIndex">
+      The index implementation.
+    </ResponseField>
+    
+    <ResponseField name="documentsStore" type="IDocumentsStore">
+      The documents store implementation.
+    </ResponseField>
+    
+    <ResponseField name="sorter" type="ISorter">
+      The sorter implementation.
+    </ResponseField>
+    
+    <ResponseField name="id" type="string">
+      The unique identifier for this database instance.
+    </ResponseField>
+    
+    <ResponseField name="version" type="string">
+      The Orama version.
+    </ResponseField>
+    
+    <ResponseField name="plugins" type="OramaPlugin[]">
+      Array of loaded plugins.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    price: 'number',
+    inStock: 'boolean'
+  }
+})
+```
+
+### With Language Configuration
+
+```typescript
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    titulo: 'string',
+    descripcion: 'string'
+  },
+  language: 'spanish'
+})
+```
+
+### With Sorting Configuration
+
+```typescript
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    price: 'number',
+    rating: 'number',
+    internal_id: 'string'
+  },
+  sort: {
+    enabled: true,
+    unsortableProperties: ['internal_id']
+  }
+})
+```
+
+### With Vector Search
+
+```typescript
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    embedding: 'vector[1536]'
+  }
+})
+```
+
+### With Plugins
+
+```typescript
+import { create } from '@orama/orama'
+import { pluginSecureProxy } from '@orama/plugin-secure-proxy'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    embedding: 'vector[1536]'
+  },
+  plugins: [
+    await pluginSecureProxy({
+      apiKey: 'your-api-key',
+      defaultProperty: 'embedding'
+    })
+  ]
+})
+```
+
+### With Custom Components
+
+```typescript
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string'
+  },
+  components: {
+    tokenizer: {
+      language: 'english',
+      stemming: true,
+      stopWords: true
+    },
+    getDocumentIndexId: (doc) => doc.customId || doc.id
+  }
+})
+```
+
+## Error Handling
+
+The `create` function may throw errors in the following cases:
+
+- **COMPONENT_MUST_BE_FUNCTION**: When a component is provided but is not a function
+- **UNSUPPORTED_COMPONENT**: When an unsupported component key is provided
+- **PLUGIN_COMPONENT_CONFLICT**: When a plugin tries to override a component that is already defined
+- **NO_LANGUAGE_WITH_CUSTOM_TOKENIZER**: When both `language` and a custom tokenizer are provided
+
+```typescript
+try {
+  const db = await create({
+    schema: { title: 'string' },
+    language: 'english',
+    components: {
+      tokenizer: customTokenizer // Error: cannot specify both
+    }
+  })
+} catch (error) {
+  console.error('Failed to create database:', error)
+}
+```
+
+## Notes
+
+- The schema cannot be modified after the database is created
+- Component conflicts between plugins and manual configuration will throw errors
+- The `afterCreate` hooks from plugins are executed after the database is fully initialized
+- All internal data structures (index, documents store, sorter, pinning) are created during initialization

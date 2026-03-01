@@ -1,0 +1,270 @@
+---
+title: load()
+description: Load a previously saved database state into an Orama instance
+---
+
+Restores a database instance from raw serialized data. This function loads the internal state of an Orama database, including the index, documents, sorting data, and pinning rules.
+
+## Function Signature
+
+```typescript
+function load<T extends AnyOrama>(orama: T, raw: RawData): void
+```
+
+## Parameters
+
+<ParamField path="orama" type="T extends AnyOrama" required>
+  An existing Orama database instance to load the data into.
+  
+  The instance must be created with the same schema as the one used when the data was saved.
+  
+  ```typescript
+  const db = await create({
+    schema: {
+      title: 'string',
+      description: 'string'
+    }
+  })
+  ```
+</ParamField>
+
+<ParamField path="raw" type="RawData" required>
+  The serialized database state returned from a previous `save()` call.
+  
+  <Expandable title="properties">
+    <ParamField path="internalDocumentIDStore" type="unknown" required>
+      Serialized internal document ID mappings.
+    </ParamField>
+    
+    <ParamField path="index" type="unknown" required>
+      Serialized index data structure containing all searchable terms and their document references.
+    </ParamField>
+    
+    <ParamField path="docs" type="unknown" required>
+      Serialized document store containing all stored documents.
+    </ParamField>
+    
+    <ParamField path="sorting" type="unknown" required>
+      Serialized sorting data structures.
+    </ParamField>
+    
+    <ParamField path="pinning" type="unknown" required>
+      Serialized pinning rules and data.
+    </ParamField>
+    
+    <ParamField path="language" type="Language" required>
+      The language used for tokenization in the original database.
+      
+      Examples: `'english'`, `'spanish'`, `'french'`, etc.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Return Value
+
+<ResponseField name="void" type="void">
+  This function does not return a value. It mutates the provided Orama instance in-place, replacing its internal state with the loaded data.
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { create, insert, save, load } from '@orama/orama'
+
+// Create and populate a database
+const originalDB = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    price: 'number'
+  }
+})
+
+await insert(originalDB, {
+  title: 'Wireless Headphones',
+  description: 'High-quality wireless headphones',
+  price: 99.99
+})
+
+// Save the database state
+const rawData = await save(originalDB)
+
+// Create a new database instance with the same schema
+const newDB = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    price: 'number'
+  }
+})
+
+// Load the saved state into the new instance
+load(newDB, rawData)
+
+// The new database now has the same state as the original
+const results = await search(newDB, {
+  term: 'wireless'
+})
+```
+
+### Loading from File
+
+```typescript
+import { create, load } from '@orama/orama'
+import { readFileSync } from 'fs'
+
+// Create an empty database with the correct schema
+const db = await create({
+  schema: {
+    title: 'string',
+    content: 'string',
+    category: 'string'
+  }
+})
+
+// Load saved data from a file
+const rawData = JSON.parse(
+  readFileSync('./database-backup.json', 'utf-8')
+)
+
+load(db, rawData)
+
+console.log('Database loaded successfully')
+```
+
+### Loading with Different Languages
+
+```typescript
+import { create, load, save } from '@orama/orama'
+
+// Original database in Spanish
+const spanishDB = await create({
+  schema: {
+    titulo: 'string',
+    contenido: 'string'
+  },
+  language: 'spanish'
+})
+
+await insert(spanishDB, {
+  titulo: 'Hola mundo',
+  contenido: 'Este es un documento en español'
+})
+
+const savedData = await save(spanishDB)
+
+// Load into a new instance - language will be restored from saved data
+const restoredDB = await create({
+  schema: {
+    titulo: 'string',
+    contenido: 'string'
+  },
+  language: 'english' // This will be overwritten by saved data
+})
+
+load(restoredDB, savedData)
+
+// The tokenizer language is now 'spanish' from the loaded data
+console.log(restoredDB.tokenizer.language) // 'spanish'
+```
+
+### Loading Across Sessions
+
+```typescript
+import { create, load } from '@orama/orama'
+
+const schema = {
+  id: 'string',
+  title: 'string',
+  tags: 'string[]',
+  rating: 'number'
+}
+
+// On application shutdown
+function saveDatabase(db) {
+  const rawData = save(db)
+  localStorage.setItem('orama-db', JSON.stringify(rawData))
+}
+
+// On application startup
+function restoreDatabase() {
+  const db = await create({ schema })
+  
+  const savedData = localStorage.getItem('orama-db')
+  if (savedData) {
+    const rawData = JSON.parse(savedData)
+    load(db, rawData)
+    console.log('Database restored from previous session')
+  }
+  
+  return db
+}
+
+const db = await restoreDatabase()
+```
+
+### Loading with Plugins
+
+```typescript
+import { create, load, save } from '@orama/orama'
+import { pluginAnalytics } from '@orama/plugin-analytics'
+
+// Original database with plugins
+const originalDB = await create({
+  schema: {
+    title: 'string',
+    content: 'string'
+  },
+  plugins: [pluginAnalytics()]
+})
+
+const savedData = await save(originalDB)
+
+// When loading, recreate the database with the same plugins
+const restoredDB = await create({
+  schema: {
+    title: 'string',
+    content: 'string'
+  },
+  plugins: [pluginAnalytics()]
+})
+
+load(restoredDB, savedData)
+```
+
+## Important Notes
+
+- The Orama instance must be created with the **exact same schema** as the one used when saving
+- Schema mismatches may cause errors or unexpected behavior when loading
+- The `load()` function **mutates** the provided instance in-place
+- All existing data in the target instance will be **replaced** with the loaded data
+- The language setting from the raw data **overwrites** the language specified during instance creation
+- Plugins must be re-initialized when creating the target instance, as plugin state is not serialized
+
+## Related Functions
+
+- [`save()`](/api/save) - Save database state to raw data
+- [`create()`](/api/create) - Create a new Orama instance
+
+## Error Handling
+
+While `load()` itself doesn't throw specific errors, you should handle potential issues:
+
+```typescript
+try {
+  const db = await create({ schema })
+  load(db, rawData)
+} catch (error) {
+  console.error('Failed to load database:', error)
+  // Handle incompatible data format or corrupted data
+}
+```
+
+## Performance Considerations
+
+- Loading is generally faster than rebuilding the database by inserting documents
+- The operation is synchronous and may block for large databases
+- Consider loading in a background thread for very large datasets
+- Memory usage during load is proportional to database size

@@ -1,0 +1,183 @@
+---
+title: insertMultiple()
+description: Insert multiple documents into an Orama database instance in batches
+---
+
+Inserts multiple documents into the Orama database in optimized batches. This method is more efficient than calling `insert()` multiple times.
+
+## Function Signature
+
+```typescript
+function insertMultiple<T extends AnyOrama>(
+  orama: T,
+  docs: PartialSchemaDeep<TypedDocument<T>>[],
+  batchSize?: number,
+  language?: string,
+  skipHooks?: boolean,
+  timeout?: number
+): Promise<string[]> | string[]
+```
+
+## Parameters
+
+<ParamField path="orama" type="Orama" required>
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="docs" type="PartialSchemaDeep<TypedDocument<T>>[]" required>
+  Array of documents to insert. Each document must match the database schema structure.
+</ParamField>
+
+<ParamField path="batchSize" type="number" default="1000">
+  Number of documents to process in each batch. Higher values may increase performance but use more memory.
+</ParamField>
+
+<ParamField path="language" type="string">
+  Optional language for tokenization. Applied to all documents in the batch.
+</ParamField>
+
+<ParamField path="skipHooks" type="boolean" default="false">
+  If true, skips executing individual insert hooks and afterInsertMultiple hook.
+</ParamField>
+
+<ParamField path="timeout" type="number" default="0">
+  Milliseconds to wait between batches. Can be used to prevent blocking the event loop.
+</ParamField>
+
+## Returns
+
+<ResponseField name="ids" type="string[] | Promise<string[]>">
+  Array of IDs for the inserted documents, in the same order as the input. Returns a Promise if async operations are required.
+</ResponseField>
+
+## Behavior
+
+- Processes documents in batches to optimize performance
+- Each document is validated and inserted using the `insert()` function
+- Sets `avlRebalanceThreshold` to the batch size for optimal tree balancing
+- Automatically handles async/sync execution based on hooks and index configuration
+- Triggers `afterInsertMultiple` hook after all documents are inserted (if not skipped)
+
+## Examples
+
+### Basic Batch Insert
+
+```typescript
+import { create, insertMultiple } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    category: 'string',
+    price: 'number'
+  }
+})
+
+const products = [
+  { id: '1', title: 'Laptop', category: 'Electronics', price: 999 },
+  { id: '2', title: 'Mouse', category: 'Electronics', price: 29 },
+  { id: '3', title: 'Keyboard', category: 'Electronics', price: 79 },
+  { id: '4', title: 'Monitor', category: 'Electronics', price: 299 }
+]
+
+const ids = await insertMultiple(db, products)
+console.log(ids) // ['1', '2', '3', '4']
+```
+
+### Insert with Custom Batch Size
+
+```typescript
+// Process 500 documents at a time
+const largeDataset = Array.from({ length: 10000 }, (_, i) => ({
+  id: `doc-${i}`,
+  title: `Document ${i}`,
+  content: `This is document number ${i}`
+}))
+
+const ids = await insertMultiple(db, largeDataset, 500)
+console.log(`Inserted ${ids.length} documents`)
+```
+
+### Insert with Timeout Between Batches
+
+```typescript
+// Wait 100ms between each batch to prevent blocking
+const ids = await insertMultiple(
+  db,
+  products,
+  1000,
+  undefined,
+  false,
+  100 // 100ms timeout
+)
+```
+
+### Import from JSON File
+
+```typescript
+import { readFile } from 'fs/promises'
+
+const data = JSON.parse(await readFile('products.json', 'utf-8'))
+const ids = await insertMultiple(db, data)
+
+console.log(`Successfully imported ${ids.length} products`)
+```
+
+### Insert with Multiple Languages
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    lang: 'string'
+  }
+})
+
+// Insert French documents
+const frenchDocs = [
+  { id: 'fr-1', title: 'Ordinateur portable', lang: 'fr' },
+  { id: 'fr-2', title: 'Souris sans fil', lang: 'fr' }
+]
+
+const frIds = await insertMultiple(db, frenchDocs, 1000, 'french')
+
+// Insert English documents
+const englishDocs = [
+  { id: 'en-1', title: 'Laptop computer', lang: 'en' },
+  { id: 'en-2', title: 'Wireless mouse', lang: 'en' }
+]
+
+const enIds = await insertMultiple(db, englishDocs, 1000, 'english')
+```
+
+### Progress Tracking
+
+```typescript
+const totalDocs = 5000
+const batchSize = 500
+const batches = []
+
+for (let i = 0; i < totalDocs; i += batchSize) {
+  batches.push(largeDataset.slice(i, i + batchSize))
+}
+
+for (const [index, batch] of batches.entries()) {
+  const ids = await insertMultiple(db, batch, batchSize)
+  console.log(`Progress: ${((index + 1) / batches.length * 100).toFixed(1)}%`)
+}
+```
+
+## Performance Tips
+
+- Use larger batch sizes for better performance, but monitor memory usage
+- Consider using `timeout` parameter for very large datasets to prevent blocking
+- Skip hooks when importing large datasets if they're not needed
+- Validate data before insertion to avoid partial failures
+
+## See Also
+
+- [insert()](/api/insert) - Insert a single document
+- [updateMultiple()](/api/update-multiple) - Update multiple documents
+- [upsertMultiple()](/api/upsert-multiple) - Insert or update multiple documents

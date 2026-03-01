@@ -1,0 +1,526 @@
+---
+title: SearchParams Types
+description: Type definitions for Orama search parameters
+---
+
+## Overview
+
+SearchParams types define the parameters for performing searches in Orama. Orama supports three search modes: full-text, vector, and hybrid search, each with its own parameter type.
+
+## SearchParams
+
+Main search parameters type that unions all search modes.
+
+```typescript
+type SearchParams<T extends AnyOrama, ResultDocument = TypedDocument<T>> =
+  | SearchParamsFullText<T, ResultDocument>
+  | SearchParamsHybrid<T, ResultDocument>
+  | SearchParamsVector<T, ResultDocument>
+```
+
+## Full-Text Search
+
+### SearchParamsFullText
+
+Parameters for traditional full-text search.
+
+```typescript
+interface SearchParamsFullText<T extends AnyOrama, ResultDocument = TypedDocument<T>>
+```
+
+<ParamField path="term" type="string">
+  The search term, sentence, or word to search for.
+</ParamField>
+
+<ParamField path="mode" type="typeof MODE_FULLTEXT_SEARCH">
+  Search mode. Defaults to full-text search if omitted.
+</ParamField>
+
+<ParamField path="properties" type="'*' | FlattenSchemaProperty<T>[]">
+  The properties to search in. Use `'*'` to search all properties.
+</ParamField>
+
+<ParamField path="limit" type="number">
+  Maximum number of results to return. Default: 10.
+</ParamField>
+
+<ParamField path="offset" type="number">
+  Number of results to skip. Default: 0.
+</ParamField>
+
+<ParamField path="sortBy" type="SortByParams<T, ResultDocument>">
+  Sort configuration. Can be a `SorterParams` object or custom function.
+  
+  <Expandable title="SorterParams properties">
+    <ParamField path="property" type="LiteralUnion<T['schema']>">
+      The property to sort by.
+    </ParamField>
+    
+    <ParamField path="order" type="'ASC' | 'DESC'">
+      Sort order. Default: 'ASC'.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="exact" type="boolean">
+  Whether to match the term exactly (no fuzzy matching).
+</ParamField>
+
+<ParamField path="tolerance" type="number">
+  Maximum Levenshtein distance for fuzzy matching. Default: 0.
+</ParamField>
+
+<ParamField path="relevance" type="BM25Params">
+  BM25 algorithm parameters for relevance scoring.
+  
+  <Expandable title="BM25Params properties">
+    <ParamField path="k" type="number">
+      Term frequency saturation parameter (1.2-2.0). Default: 1.2.
+    </ParamField>
+    
+    <ParamField path="b" type="number">
+      Document length normalization (0-1). Default: 0.75.
+    </ParamField>
+    
+    <ParamField path="d" type="number">
+      Frequency normalization lower bound. Default: 0.5.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="boost" type="Partial<Record<string, number>>">
+  Score multipliers for specific properties.
+</ParamField>
+
+<ParamField path="facets" type="FacetsParams<T>">
+  Facet configuration for aggregating results.
+  
+  <Expandable title="Facet types">
+    **StringFacetDefinition**
+    ```typescript
+    {
+      limit?: number
+      offset?: number
+      sort?: 'asc' | 'desc' | 'ASC' | 'DESC'
+    }
+    ```
+    
+    **NumberFacetDefinition**
+    ```typescript
+    {
+      ranges: { from: number; to: number }[]
+    }
+    ```
+    
+    **BooleanFacetDefinition**
+    ```typescript
+    {
+      true?: boolean
+      false?: boolean
+    }
+    ```
+  </Expandable>
+</ParamField>
+
+<ParamField path="distinctOn" type="LiteralUnion<T['schema']>">
+  Property to use for deduplication.
+</ParamField>
+
+<ParamField path="groupBy" type="GroupByParams<T, ResultDocument>">
+  Group results by properties.
+  
+  <Expandable title="GroupByParams properties">
+    <ParamField path="properties" type="LiteralUnion<T['schema']>[]">
+      Properties to group by.
+    </ParamField>
+    
+    <ParamField path="maxResult" type="number">
+      Maximum results per group.
+    </ParamField>
+    
+    <ParamField path="reduce" type="Reduce<ResultDocument>">
+      Custom reducer function for aggregating group results.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="where" type="Partial<WhereCondition<T['schema']>>">
+  Filter conditions. See [Filter Operators](#filter-operators) below.
+</ParamField>
+
+<ParamField path="threshold" type="number">
+  Minimum score threshold (0-1). Default: 0.
+</ParamField>
+
+<ParamField path="preflight" type="boolean">
+  Only return count and facets, skip actual results.
+</ParamField>
+
+<ParamField path="includeVectors" type="boolean">
+  Include vector values in results. Default: false.
+</ParamField>
+
+### Example
+
+```typescript
+import { search } from '@orama/orama';
+
+const results = await search(db, {
+  term: 'laptop',
+  properties: ['title', 'description'],
+  limit: 20,
+  offset: 0,
+  tolerance: 1,
+  boost: {
+    title: 2 // Title matches score twice as high
+  },
+  where: {
+    price: { lt: 1000 },
+    inStock: true
+  },
+  facets: {
+    category: {
+      limit: 10,
+      sort: 'DESC'
+    }
+  },
+  sortBy: {
+    property: 'price',
+    order: 'ASC'
+  }
+});
+```
+
+## Vector Search
+
+### SearchParamsVector
+
+Parameters for vector similarity search.
+
+```typescript
+interface SearchParamsVector<T extends AnyOrama, ResultDocument = TypedDocument<T>>
+```
+
+<ParamField path="mode" type="typeof MODE_VECTOR_SEARCH" required>
+  Must be set to `'vector'`.
+</ParamField>
+
+<ParamField path="term" type="string">
+  Search term (converted to vector by Secure Proxy plugin).
+</ParamField>
+
+<ParamField path="vector" type="{ value: number[], property: string }">
+  Vector for similarity search.
+  
+  <Expandable title="Vector properties">
+    <ParamField path="value" type="Array<number> | VectorType">
+      The vector array.
+    </ParamField>
+    
+    <ParamField path="property" type="string">
+      The schema property containing vectors.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="similarity" type="number">
+  Minimum similarity score (0-1). Default: 0.8.
+</ParamField>
+
+<ParamField path="limit" type="number">
+  Maximum number of results. Default: 10.
+</ParamField>
+
+<ParamField path="offset" type="number">
+  Number of results to skip. Default: 0.
+</ParamField>
+
+<ParamField path="where" type="Partial<WhereCondition<T['schema']>>">
+  Filter conditions.
+</ParamField>
+
+<ParamField path="facets" type="FacetsParams<T>">
+  Facet configuration.
+</ParamField>
+
+<ParamField path="groupBy" type="GroupByParams<T, ResultDocument>">
+  Group results by properties.
+</ParamField>
+
+<ParamField path="includeVectors" type="boolean">
+  Include vector values in results. Default: false.
+</ParamField>
+
+### Example
+
+```typescript
+const results = await search(db, {
+  mode: 'vector',
+  vector: {
+    value: embeddings, // number[]
+    property: 'embedding'
+  },
+  similarity: 0.8,
+  limit: 10,
+  where: {
+    category: { eq: 'electronics' }
+  }
+});
+```
+
+## Hybrid Search
+
+### SearchParamsHybrid
+
+Parameters for combined full-text and vector search.
+
+```typescript
+interface SearchParamsHybrid<T extends AnyOrama, ResultDocument = TypedDocument<T>>
+```
+
+<ParamField path="mode" type="typeof MODE_HYBRID_SEARCH" required>
+  Must be set to `'hybrid'`.
+</ParamField>
+
+<ParamField path="term" type="string" required>
+  The search term for full-text search.
+</ParamField>
+
+<ParamField path="vector" type="{ value: number[], property: string }">
+  Vector for similarity search.
+</ParamField>
+
+<ParamField path="properties" type="'*' | FlattenSchemaProperty<T>[]">
+  Properties to search for full-text portion.
+</ParamField>
+
+<ParamField path="tolerance" type="number">
+  Levenshtein distance for full-text matching.
+</ParamField>
+
+<ParamField path="relevance" type="BM25Params">
+  BM25 parameters for full-text search.
+</ParamField>
+
+<ParamField path="limit" type="number">
+  Results per search mode (10 full-text + 10 vector). Default: 10.
+</ParamField>
+
+<ParamField path="offset" type="number">
+  Results to skip per mode. Default: 0.
+</ParamField>
+
+<ParamField path="similarity" type="number">
+  Minimum vector similarity. Default: 0.8.
+</ParamField>
+
+<ParamField path="boost" type="Partial<Record<string, number>>">
+  Property boosts for full-text search.
+</ParamField>
+
+<ParamField path="hybridWeights" type="HybridWeights">
+  Weight distribution between search modes.
+  
+  <Expandable title="HybridWeights properties">
+    <ParamField path="text" type="number">
+      Weight for full-text results (0-1). Default: 0.5.
+    </ParamField>
+    
+    <ParamField path="vector" type="number">
+      Weight for vector results (0-1). Default: 0.5.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="where" type="Partial<WhereCondition<T['schema']>>">
+  Filter conditions.
+</ParamField>
+
+<ParamField path="facets" type="FacetsParams<T>">
+  Facets (full-text results only).
+</ParamField>
+
+<ParamField path="groupBy" type="GroupByParams<T, ResultDocument>">
+  Group results.
+</ParamField>
+
+<ParamField path="threshold" type="number">
+  Minimum score for full-text results. Default: 1.
+</ParamField>
+
+<ParamField path="includeVectors" type="boolean">
+  Include vectors in results. Default: false.
+</ParamField>
+
+### Example
+
+```typescript
+const results = await search(db, {
+  mode: 'hybrid',
+  term: 'noise cancelling headphones',
+  vector: {
+    value: queryEmbedding,
+    property: 'embedding'
+  },
+  hybridWeights: {
+    text: 0.3,
+    vector: 0.7
+  },
+  properties: ['title', 'description'],
+  limit: 20
+});
+```
+
+## Filter Operators
+
+### WhereCondition
+
+Filter conditions support various operators based on field type.
+
+```typescript
+type WhereCondition<TSchema> =
+  | { [key in keyof TSchema]?: Operator<TSchema[key]> }
+  | { and?: WhereCondition<TSchema>[] }
+  | { or?: WhereCondition<TSchema>[] }
+  | { not?: WhereCondition<TSchema> }
+```
+
+### ComparisonOperator
+
+For number fields:
+
+```typescript
+type ComparisonOperator = {
+  gt?: number   // Greater than
+  gte?: number  // Greater than or equal
+  lt?: number   // Less than
+  lte?: number  // Less than or equal
+  eq?: number   // Equal
+  between?: [number, number]  // Between range
+}
+```
+
+### EnumComparisonOperator
+
+For enum fields:
+
+```typescript
+type EnumComparisonOperator = {
+  eq?: string | number | boolean
+  in?: (string | number | boolean)[]
+  nin?: (string | number | boolean)[]  // Not in
+}
+```
+
+### EnumArrComparisonOperator
+
+For enum array fields:
+
+```typescript
+type EnumArrComparisonOperator = {
+  containsAll?: (string | number | boolean)[]
+  containsAny?: (string | number | boolean)[]
+}
+```
+
+### GeosearchOperation
+
+For geopoint fields:
+
+**Radius Search**
+```typescript
+type GeosearchRadiusOperator = {
+  radius: {
+    coordinates: Point
+    value: number
+    unit?: 'cm' | 'm' | 'km' | 'ft' | 'yd' | 'mi'
+    inside?: boolean
+    highPrecision?: boolean
+  }
+}
+```
+
+**Polygon Search**
+```typescript
+type GeosearchPolygonOperator = {
+  polygon: {
+    coordinates: Point[]
+    inside?: boolean
+    highPrecision?: boolean
+  }
+}
+```
+
+### Filter Examples
+
+```typescript
+// Number comparisons
+await search(db, {
+  term: 'laptop',
+  where: {
+    price: { gte: 500, lte: 1500 },
+    rating: { gt: 4.0 }
+  }
+});
+
+// String/boolean exact match
+await search(db, {
+  term: 'headphones',
+  where: {
+    category: 'electronics',
+    inStock: true
+  }
+});
+
+// Enum operators
+await search(db, {
+  term: 'phone',
+  where: {
+    brand: { in: ['Apple', 'Samsung', 'Google'] },
+    condition: { eq: 'new' }
+  }
+});
+
+// Logical operators
+await search(db, {
+  term: 'tablet',
+  where: {
+    or: [
+      { price: { lt: 300 } },
+      { brand: { eq: 'Apple' } }
+    ]
+  }
+});
+
+// Geosearch - radius
+await search(db, {
+  term: 'restaurant',
+  where: {
+    location: {
+      radius: {
+        coordinates: { lat: 40.7128, lon: -74.0060 },
+        value: 5,
+        unit: 'km',
+        inside: true
+      }
+    }
+  }
+});
+
+// Geosearch - polygon
+await search(db, {
+  term: 'store',
+  where: {
+    location: {
+      polygon: {
+        coordinates: [
+          { lat: 40.7128, lon: -74.0060 },
+          { lat: 40.7580, lon: -73.9855 },
+          { lat: 40.7489, lon: -73.9680 }
+        ],
+        inside: true
+      }
+    }
+  }
+});
+```

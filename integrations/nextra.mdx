@@ -1,0 +1,491 @@
+---
+title: Nextra Integration
+description: Integrate Orama search into your Nextra documentation with React components
+---
+
+The Orama Nextra plugin provides a React-based search solution for Nextra documentation sites, with automatic indexing, highlighting, and a polished search interface.
+
+## Installation
+
+Install the plugin using your preferred package manager:
+
+<CodeGroup>
+
+```bash npm
+npm install @orama/plugin-nextra
+```
+
+```bash yarn
+yarn add @orama/plugin-nextra
+```
+
+```bash pnpm
+pnpm add @orama/plugin-nextra
+```
+
+</CodeGroup>
+
+## Quick Start
+
+Add the Orama search component to your Nextra site:
+
+```jsx pages/_app.js
+import { OramaSearch } from '@orama/plugin-nextra'
+
+function MyApp({ Component, pageProps }) {
+  return (
+    <>
+      <OramaSearch />
+      <Component {...pageProps} />
+    </>
+  )
+}
+
+export default MyApp
+```
+
+<Note>
+  The plugin automatically indexes your content at runtime and provides instant client-side search.
+</Note>
+
+## Configuration
+
+### Basic Configuration
+
+Use the default configuration for quick setup:
+
+```jsx pages/_app.js
+import { OramaSearch } from '@orama/plugin-nextra'
+
+function MyApp({ Component, pageProps }) {
+  return (
+    <>
+      <OramaSearch
+        limitResults={30}
+        boost={{
+          title: 2,
+          description: 1,
+          content: 1
+        }}
+      />
+      <Component {...pageProps} />
+    </>
+  )
+}
+
+export default MyApp
+```
+
+### Advanced Configuration
+
+Customize search behavior and relevance:
+
+```jsx pages/_app.js
+import { OramaSearch } from '@orama/plugin-nextra'
+
+function MyApp({ Component, pageProps }) {
+  return (
+    <>
+      <OramaSearch
+        limitResults={50}
+        boost={{
+          title: 3,        // Title matches are most important
+          description: 2,  // Description matches are moderately important
+          content: 1       // Content matches have standard weight
+        }}
+      />
+      <Component {...pageProps} />
+    </>
+  )
+}
+
+export default MyApp
+```
+
+## Configuration Options
+
+<ParamField path="limitResults" type="number" default={30}>
+  Maximum number of search results to display. Higher values show more results but may impact performance.
+</ParamField>
+
+<ParamField path="boost" type="object">
+  Configure relevance boosting for different content fields.
+  
+  <Expandable>
+    <ParamField path="boost.title" type="number" default={2}>
+      Boost factor for matches in document titles. Higher values prioritize title matches.
+    </ParamField>
+    
+    <ParamField path="boost.description" type="number" default={1}>
+      Boost factor for matches in descriptions/summaries.
+    </ParamField>
+    
+    <ParamField path="boost.content" type="number" default={1}>
+      Boost factor for matches in main content.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Component Features
+
+The `OramaSearch` component provides:
+
+<CardGroup cols={2}>
+  <Card title="Match Highlighting" icon="highlighter">
+    Automatically highlights search terms in results
+  </Card>
+  
+  <Card title="Grouped Results" icon="layer-group">
+    Results are grouped by page for better organization
+  </Card>
+  
+  <Card title="Keyboard Navigation" icon="keyboard">
+    Full keyboard support with ⌘K/Ctrl+K shortcuts
+  </Card>
+  
+  <Card title="Real-Time Search" icon="bolt">
+    Instant results as you type with no lag
+  </Card>
+  
+  <Card title="Responsive Design" icon="mobile-screen">
+    Works perfectly on all device sizes
+  </Card>
+  
+  <Card title="Theme Support" icon="palette">
+    Automatically matches your Nextra theme
+  </Card>
+</CardGroup>
+
+## How It Works
+
+The plugin operates in several stages:
+
+### 1. Content Indexing
+
+When your app loads, the plugin:
+- Reads your Nextra page structure
+- Extracts content from all documentation pages
+- Creates an Orama search index
+- Stores the index in memory for fast access
+
+### 2. Search Execution
+
+When users search:
+- Queries are executed against the in-memory index
+- Results are highlighted using `@orama/plugin-match-highlight`
+- Results are grouped by document/page
+- Relevance is calculated using boost factors
+
+### 3. Result Display
+
+Results are displayed with:
+- Document title grouping
+- Highlighted matching terms
+- Content snippets
+- Direct navigation links
+
+## Search Index Structure
+
+The plugin creates an index with this schema:
+
+```typescript
+interface NextraOrama {
+  title: string          // Page or section title
+  description: string    // Page description/summary
+  content: string        // Main content text
+  url: string           // Page URL path
+  locale: string        // Content locale (e.g., 'en-US')
+}
+```
+
+## Search UI Components
+
+The plugin includes several React components:
+
+### OramaSearch
+
+Main search component with input and results:
+
+```jsx
+import { OramaSearch } from '@orama/plugin-nextra'
+
+<OramaSearch
+  limitResults={30}
+  boost={{ title: 2, description: 1, content: 1 }}
+/>
+```
+
+### Search Input
+
+The search input includes:
+- Placeholder text: "Search documentation..."
+- Keyboard shortcut indicator (⌘K)
+- Focus/blur state management
+- Auto-clear on navigation
+
+### Search Results
+
+Results display with:
+- Grouped by page title
+- Highlighted matched terms
+- Content snippets
+- Click-to-navigate functionality
+
+### Orama Footer
+
+Branded footer showing:
+- Number of results found
+- "Powered by Orama" badge
+- Search performance metrics
+
+## Highlighting
+
+The plugin uses `@orama/plugin-match-highlight` for intelligent highlighting:
+
+```jsx
+import { searchWithHighlight } from '@orama/plugin-match-highlight'
+
+const results = await searchWithHighlight(db, {
+  term: 'search query',
+  mode: 'fulltext',
+  limit: 30,
+  boost: {
+    title: 2,
+    description: 1,
+    content: 1
+  }
+})
+```
+
+Highlighting features:
+- **Exact Matches**: Highlights exact term matches
+- **Partial Matches**: Highlights partial word matches
+- **Context Preservation**: Shows surrounding context
+- **Multiple Terms**: Highlights all query terms
+
+## Multi-Language Support
+
+For multi-language Nextra sites:
+
+```jsx pages/_app.js
+import { OramaSearch } from '@orama/plugin-nextra'
+import { useRouter } from 'next/router'
+
+function MyApp({ Component, pageProps }) {
+  const router = useRouter()
+  const { locale } = router
+  
+  return (
+    <>
+      <OramaSearch
+        key={locale}  // Re-index when locale changes
+        limitResults={30}
+      />
+      <Component {...pageProps} />
+    </>
+  )
+}
+
+export default MyApp
+```
+
+The plugin automatically:
+- Detects the current locale from Next.js router
+- Indexes content for each locale separately
+- Maintains separate search indexes per language
+
+## Keyboard Shortcuts
+
+The search component supports these keyboard shortcuts:
+
+<ResponseField name="⌘K / Ctrl+K" type="shortcut">
+  Opens or focuses the search input
+</ResponseField>
+
+<ResponseField name="ESC" type="shortcut">
+  Closes the search results or clears the input
+</ResponseField>
+
+<ResponseField name="↑ / ↓" type="shortcut">
+  Navigate through search results
+</ResponseField>
+
+<ResponseField name="Enter" type="shortcut">
+  Navigate to the selected result
+</ResponseField>
+
+## Styling
+
+The plugin uses Nextra's default styling with additional custom classes:
+
+```jsx
+// Input styles
+const inputStyles = "nx-w-full nx-px-4 nx-py-2 nx-border nx-rounded..."
+
+// Result styles
+const resultStyles = "nx-p-3 nx-hover:bg-gray-100 nx-cursor-pointer..."
+
+// Highlight styles
+const highlightStyles = "nx-bg-yellow-200 nx-font-semibold..."
+```
+
+### Custom Styling
+
+Override styles with CSS:
+
+```css styles.css
+/* Customize search input */
+.orama-search-input {
+  border-color: #4f46e5;
+  border-radius: 8px;
+}
+
+/* Customize result items */
+.orama-search-result {
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* Customize highlights */
+.orama-highlight {
+  background-color: #fef3c7;
+  font-weight: 600;
+}
+```
+
+## Performance Optimization
+
+The plugin is optimized for performance:
+
+### Index Creation
+- Indexes are created asynchronously on app load
+- Content is indexed in parallel when possible
+- Memory-efficient data structures
+
+### Search Execution
+- Debounced search input (waits for user to stop typing)
+- Efficient full-text search algorithms
+- Result limit prevents overwhelming the UI
+
+### Result Rendering
+- Virtual scrolling for large result sets
+- Lazy loading of result details
+- Efficient React rendering with keys
+
+<Tip>
+  For sites with many pages (100+), consider increasing the `limitResults` cautiously to balance comprehensiveness with performance.
+</Tip>
+
+## Advanced Usage
+
+### Custom Result Grouping
+
+The plugin groups results by title. You can customize grouping logic:
+
+```jsx
+import { groupDocumentsBy } from '@orama/plugin-nextra'
+
+const groupedByCategory = groupDocumentsBy(results.hits, 'category')
+const groupedByUrl = groupDocumentsBy(results.hits, 'url')
+```
+
+### Manual Index Creation
+
+For advanced use cases, create indexes manually:
+
+```jsx
+import { useCreateOramaIndex } from '@orama/plugin-nextra'
+
+function MySearchComponent() {
+  const { indexes } = useCreateOramaIndex()
+  
+  // indexes is an object with locale keys
+  // indexes['en-US'] -> Orama instance for English
+  // indexes['es-ES'] -> Orama instance for Spanish
+  
+  // Use the indexes for custom search logic
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Search not appearing">
+    Ensure the `OramaSearch` component is included in your `_app.js` file and is rendered in the component tree.
+    
+    ```jsx
+    // ✅ Correct placement
+    function MyApp({ Component, pageProps }) {
+      return (
+        <>
+          <OramaSearch />
+          <Component {...pageProps} />
+        </>
+      )
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="No results found">
+    Check that:
+    - Your Nextra pages have content to index
+    - The router is ready (`router.isReady` returns true)
+    - Content is in the expected locale
+  </Accordion>
+  
+  <Accordion title="Keyboard shortcuts not working">
+    Ensure no other components or libraries are capturing the ⌘K/Ctrl+K shortcut. The plugin uses `useFocus` hook to manage keyboard events.
+  </Accordion>
+  
+  <Accordion title="Highlighting not working">
+    Verify that `@orama/plugin-match-highlight` is installed:
+    ```bash
+    npm list @orama/plugin-match-highlight
+    ```
+    
+    If missing, reinstall the Nextra plugin:
+    ```bash
+    npm install @orama/plugin-nextra
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Package Information
+
+- **Package Name:** `@orama/plugin-nextra`
+- **Version:** 3.1.18
+- **License:** Apache-2.0
+- **Repository:** [github.com/oramasearch/orama](https://github.com/oramasearch/orama)
+
+## Dependencies
+
+The plugin includes:
+- `@orama/orama`: Core search engine
+- `@orama/plugin-match-highlight`: Search result highlighting
+- `next`: Next.js framework
+- `react` & `react-dom`: React libraries
+- `classnames`: CSS class utilities
+
+## Requirements
+
+- Nextra 2.x or 3.x
+- Next.js ^14.0.0
+- React ^18.0.0
+- Node.js >= 16
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Match Highlight Plugin" icon="highlighter" href="/open-source/plugins/match-highlight">
+    Learn about the highlighting system
+  </Card>
+  <Card title="Orama Core" icon="database" href="/open-source/orama">
+    Explore the core search engine
+  </Card>
+  <Card title="React Integration" icon="react" href="/open-source/plugins/react-components">
+    Build custom React search components
+  </Card>
+  <Card title="Full Documentation" icon="book" href="https://docs.orama.com/docs/orama-js/plugins/plugin-nextra">
+    View the complete guide
+  </Card>
+</CardGroup>

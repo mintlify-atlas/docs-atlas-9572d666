@@ -1,0 +1,465 @@
+---
+title: Sorting
+description: Sort search results by property values
+---
+
+# Sorting
+
+Orama allows you to sort search results by any indexed property in ascending or descending order. You can also use custom sorting functions for advanced use cases.
+
+## Basic Sorting
+
+Use the `sortBy` parameter to sort results by a property:
+
+```javascript
+import { create, insert, search } from '@orama/orama'
+
+const db = create({
+  schema: {
+    title: 'string',
+    price: 'number',
+    rating: 'number'
+  }
+})
+
+insert(db, {
+  title: 'Wireless Headphones',
+  price: 99.99,
+  rating: 4.5
+})
+
+const results = search(db, {
+  term: 'headphones',
+  sortBy: {
+    property: 'price',
+    order: 'ASC'
+  }
+})
+```
+
+## Sort Parameters
+
+<ParamField path="sortBy.property" type="string" required>
+  The property to sort by. Must be a sortable property in your schema.
+</ParamField>
+
+<ParamField path="sortBy.order" type="'ASC' | 'DESC'" default="'DESC'">
+  Sort order: `'ASC'` for ascending, `'DESC'` for descending
+</ParamField>
+
+## Sortable Property Types
+
+Orama supports sorting on the following property types:
+
+<CodeGroup>
+```javascript Number Properties
+const results = search(db, {
+  term: 'product',
+  sortBy: {
+    property: 'price',
+    order: 'ASC'  // Lowest to highest
+  }
+})
+```
+
+```javascript String Properties
+const results = search(db, {
+  term: 'product',
+  sortBy: {
+    property: 'title',
+    order: 'ASC'  // Alphabetical A-Z
+  }
+})
+```
+
+```javascript Boolean Properties
+const results = search(db, {
+  term: 'product',
+  sortBy: {
+    property: 'inStock',
+    order: 'DESC'  // true first, then false
+  }
+})
+```
+</CodeGroup>
+
+<Note>
+Vector properties and enum arrays cannot be used for sorting.
+</Note>
+
+## Sort Order
+
+### Ascending Order
+
+Sort from smallest to largest (numbers), A-Z (strings), or false to true (booleans):
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  sortBy: {
+    property: 'price',
+    order: 'ASC'
+  }
+})
+// Results: $10, $20, $50, $100, $200
+```
+
+### Descending Order
+
+Sort from largest to smallest (numbers), Z-A (strings), or true to false (booleans):
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  sortBy: {
+    property: 'price',
+    order: 'DESC'
+  }
+})
+// Results: $200, $100, $50, $20, $10
+```
+
+## Nested Property Sorting
+
+Sort by nested object properties:
+
+```javascript
+const db = create({
+  schema: {
+    title: 'string',
+    meta: {
+      rating: 'number',
+      reviews: 'number'
+    }
+  }
+})
+
+const results = search(db, {
+  term: 'product',
+  sortBy: {
+    property: 'meta.rating',
+    order: 'DESC'
+  }
+})
+```
+
+## Default Sorting Behavior
+
+When `sortBy` is not specified, results are sorted by relevance score:
+
+```javascript
+const results = search(db, {
+  term: 'headphones'
+  // Results sorted by BM25 score (most relevant first)
+})
+```
+
+<Info>
+Without explicit sorting, Orama uses BM25 scoring for full-text search and cosine similarity for vector search to rank results.
+</Info>
+
+## Custom Sorting Functions
+
+For advanced sorting needs, provide a custom sorting function:
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  sortBy: (a, b) => {
+    const [idA, scoreA, docA] = a
+    const [idB, scoreB, docB] = b
+    
+    // Sort by price, then by rating if prices are equal
+    if (docA.price !== docB.price) {
+      return docA.price - docB.price  // Ascending by price
+    }
+    return docB.rating - docA.rating  // Descending by rating
+  }
+})
+```
+
+### Custom Function Parameters
+
+The custom function receives two arguments, each containing:
+
+<ParamField path="[0]" type="InternalDocumentID">
+  The internal document ID
+</ParamField>
+
+<ParamField path="[1]" type="number">
+  The relevance score
+</ParamField>
+
+<ParamField path="[2]" type="Document">
+  The full document object
+</ParamField>
+
+### Custom Function Examples
+
+<CodeGroup>
+```javascript Multi-field Sorting
+const results = search(db, {
+  term: 'product',
+  sortBy: (a, b) => {
+    const [, , docA] = a
+    const [, , docB] = b
+    
+    // First by inStock (true first)
+    if (docA.inStock !== docB.inStock) {
+      return docB.inStock - docA.inStock
+    }
+    
+    // Then by rating (highest first)
+    if (docA.rating !== docB.rating) {
+      return docB.rating - docA.rating
+    }
+    
+    // Finally by price (lowest first)
+    return docA.price - docB.price
+  }
+})
+```
+
+```javascript Sort by Computed Value
+const results = search(db, {
+  term: 'product',
+  sortBy: (a, b) => {
+    const [, , docA] = a
+    const [, , docB] = b
+    
+    // Sort by value score (rating * 10 - price)
+    const valueA = docA.rating * 10 - docA.price
+    const valueB = docB.rating * 10 - docB.price
+    
+    return valueB - valueA  // Higher value first
+  }
+})
+```
+
+```javascript Sort by Relevance and Property
+const results = search(db, {
+  term: 'product',
+  sortBy: (a, b) => {
+    const [, scoreA, docA] = a
+    const [, scoreB, docB] = b
+    
+    // If scores are very close, sort by price
+    const scoreDiff = Math.abs(scoreA - scoreB)
+    if (scoreDiff < 0.1) {
+      return docA.price - docB.price
+    }
+    
+    // Otherwise sort by relevance
+    return scoreB - scoreA
+  }
+})
+```
+</CodeGroup>
+
+## Sorting with Different Search Modes
+
+### Full-Text Search
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  mode: 'fulltext',
+  sortBy: {
+    property: 'price',
+    order: 'ASC'
+  }
+})
+```
+
+### Vector Search
+
+```javascript
+const results = search(db, {
+  mode: 'vector',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  sortBy: {
+    property: 'price',
+    order: 'ASC'
+  }
+})
+```
+
+<Note>
+For vector search, sorting overrides the default similarity-based ranking.
+</Note>
+
+### Hybrid Search
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  sortBy: {
+    property: 'price',
+    order: 'ASC'
+  }
+})
+```
+
+## Combining Sorting with Filters
+
+Filter results first, then sort:
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  where: {
+    price: {
+      lt: 100
+    },
+    inStock: true
+  },
+  sortBy: {
+    property: 'rating',
+    order: 'DESC'
+  }
+})
+```
+
+<Info>
+Sorting is applied **after** filtering, so only filtered results are sorted.
+</Info>
+
+## Sorting with Pagination
+
+Combine sorting with limit and offset:
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  sortBy: {
+    property: 'price',
+    order: 'ASC'
+  },
+  limit: 10,
+  offset: 0
+})
+
+// Next page
+const nextPage = search(db, {
+  term: 'headphones',
+  sortBy: {
+    property: 'price',
+    order: 'ASC'
+  },
+  limit: 10,
+  offset: 10
+})
+```
+
+## Disabling Sortable Properties
+
+You can disable sorting on specific properties using sorter configuration:
+
+```javascript
+import { create } from '@orama/orama'
+
+const db = create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    price: 'number'
+  },
+  components: {
+    sorter: {
+      unsortableProperties: ['description']
+    }
+  }
+})
+
+// This will work
+search(db, {
+  term: 'product',
+  sortBy: { property: 'price', order: 'ASC' }
+})
+
+// This will throw an error
+search(db, {
+  term: 'product',
+  sortBy: { property: 'description', order: 'ASC' }
+})
+```
+
+<Warning>
+Attempting to sort by an unsortable property will throw an error.
+</Warning>
+
+## Performance Considerations
+
+<Steps>
+  <Step title="Index Sorted Properties">
+    Properties used for sorting are automatically indexed during document insertion
+  </Step>
+  
+  <Step title="Limit Result Count">
+    Use `limit` to reduce the number of results that need sorting:
+    ```javascript
+    search(db, {
+      term: 'query',
+      sortBy: { property: 'price', order: 'ASC' },
+      limit: 20  // Only sort top 20 results
+    })
+    ```
+  </Step>
+  
+  <Step title="Simple Sorting is Faster">
+    Single-property sorting is faster than custom sort functions:
+    ```javascript
+    // Faster
+    sortBy: { property: 'price', order: 'ASC' }
+    
+    // Slower (but more flexible)
+    sortBy: (a, b) => { /* complex logic */ }
+    ```
+  </Step>
+  
+  <Step title="Consider Relevance Scoring">
+    For text search, the default relevance sorting is often the best choice
+  </Step>
+</Steps>
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="E-commerce" icon="shopping-cart">
+    Sort products by price, rating, or popularity
+  </Card>
+  <Card title="Content Sorting" icon="newspaper">
+    Sort articles by date, views, or relevance
+  </Card>
+  <Card title="Leaderboards" icon="trophy">
+    Sort users by score or ranking
+  </Card>
+  <Card title="Inventory" icon="boxes">
+    Sort items by stock level or location
+  </Card>
+</CardGroup>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Filters" icon="filter" href="/search/filters">
+    Filter before sorting
+  </Card>
+  <Card title="Full-Text Search" icon="text" href="/search/full-text-search">
+    Combine sorting with text search
+  </Card>
+  <Card title="Facets" icon="list" href="/search/facets">
+    Sort facet values
+  </Card>
+  <Card title="Boosting" icon="arrow-up" href="/search/boosting">
+    Influence relevance scoring before sorting
+  </Card>
+</CardGroup>

@@ -1,0 +1,327 @@
+---
+title: Vector Search
+description: Perform semantic vector similarity search with Orama
+---
+
+# Vector Search
+
+Vector search allows you to perform semantic similarity searches using embeddings. This enables finding documents based on meaning rather than exact keyword matches.
+
+## Basic Vector Search
+
+To perform vector search, set the `mode` to `'vector'` and provide a vector with its property:
+
+```javascript
+import { create, insertMultiple, search, MODE_VECTOR_SEARCH } from '@orama/orama'
+
+const db = create({
+  schema: {
+    title: 'string',
+    embedding: 'vector[5]' // 5-dimensional vector
+  }
+})
+
+insertMultiple(db, [
+  { title: 'The Prestige', embedding: [0.938293, 0.284951, 0.348264, 0.948276, 0.56472] },
+  { title: 'Barbie', embedding: [0.192839, 0.028471, 0.284738, 0.937463, 0.092827] },
+  { title: 'Oppenheimer', embedding: [0.827391, 0.927381, 0.001982, 0.983821, 0.294841] }
+])
+
+const results = search(db, {
+  mode: MODE_VECTOR_SEARCH,
+  vector: {
+    value: [0.938292, 0.284961, 0.248264, 0.748276, 0.26472],
+    property: 'embedding'
+  },
+  similarity: 0.85
+})
+```
+
+## Vector Schema Definition
+
+Define vector properties in your schema with a specific dimension size:
+
+```javascript
+const db = create({
+  schema: {
+    description: 'string',
+    // Vector size must be declared during schema initialization
+    embedding: 'vector[1536]' // OpenAI ada-002 embeddings
+  }
+})
+```
+
+<Warning>
+The vector dimension must match the size of embeddings you provide. Common sizes:
+- OpenAI ada-002: 1536 dimensions
+- OpenAI text-embedding-3-small: 512 or 1536 dimensions
+- Sentence transformers: 384-768 dimensions
+</Warning>
+
+## Search Parameters
+
+### vector
+
+The vector configuration specifies which embedding to search with:
+
+<CodeGroup>
+```javascript Float32Array
+const results = search(db, {
+  mode: 'vector',
+  vector: {
+    value: new Float32Array([0.1, 0.2, 0.3]),
+    property: 'embedding'
+  }
+})
+```
+
+```javascript Regular Array
+const results = search(db, {
+  mode: 'vector',
+  vector: {
+    value: [0.1, 0.2, 0.3],
+    property: 'embedding'
+  }
+})
+```
+</CodeGroup>
+
+<ParamField path="vector.value" type="number[] | Float32Array" required>
+  The embedding vector to search with. Must match the dimension defined in the schema.
+</ParamField>
+
+<ParamField path="vector.property" type="string" required>
+  The schema property containing the embeddings to compare against.
+</ParamField>
+
+### similarity
+
+Set the minimum similarity threshold for results:
+
+```javascript
+const results = search(db, {
+  mode: 'vector',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  similarity: 0.8 // Default: 0.8 (range: 0-1)
+})
+```
+
+<Info>
+Similarity is calculated using cosine similarity. A value of `1.0` means identical vectors, while `0.0` means completely different.
+</Info>
+
+### limit and offset
+
+Control pagination of vector search results:
+
+```javascript
+const results = search(db, {
+  mode: 'vector',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  limit: 10,  // Return 10 results (default: 10)
+  offset: 0   // Skip first 0 results (default: 0)
+})
+```
+
+### includeVectors
+
+Control whether to include vectors in the response:
+
+```javascript
+const results = search(db, {
+  mode: 'vector',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  includeVectors: true // Default: false
+})
+```
+
+<Warning>
+Vectors can be very large. By default, Orama sets vectors to `null` in responses. Only set `includeVectors: true` if you need the actual embedding values.
+</Warning>
+
+## Using with Secure Proxy Plugin
+
+The Secure Proxy plugin can automatically convert search terms to vectors:
+
+```javascript
+import { create } from '@orama/orama'
+import { pluginSecureProxy } from '@orama/plugin-secure-proxy'
+
+const db = create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    embedding: 'vector[1536]'
+  },
+  plugins: [
+    await pluginSecureProxy({ 
+      apiKey: 'your-api-key',
+      defaultProperty: 'embedding' 
+    })
+  ]
+})
+
+// The plugin will automatically convert the term to a vector
+const result = search(db, {
+  mode: 'vector',
+  term: 'Noise cancelling headphones'
+})
+```
+
+## Generating Embeddings
+
+### With Plugin Embeddings
+
+Use the embeddings plugin to generate vectors automatically:
+
+```javascript
+import { create, insert, search } from '@orama/orama'
+import { pluginEmbeddings } from '@orama/plugin-embeddings'
+import '@tensorflow/tfjs-node'
+
+const plugin = await pluginEmbeddings({
+  embeddings: {
+    defaultProperty: 'embeddings',
+    onInsert: {
+      generate: true,
+      properties: ['description'],
+      verbose: true
+    }
+  }
+})
+
+const db = create({
+  schema: {
+    description: 'string',
+    embeddings: 'vector[512]' // Plugin generates 512-dimension vectors
+  },
+  plugins: [plugin]
+})
+
+// Embeddings generated automatically at insert time
+await insert(db, { 
+  description: 'Noise cancelling headphones' 
+})
+
+// Embeddings generated automatically at search time
+const results = await search(db, {
+  term: 'Headphones for students',
+  mode: 'vector'
+})
+```
+
+<Info>
+The `@orama/plugin-embeddings` plugin uses TensorFlow.js models and generates 512-dimensional vectors.
+</Info>
+
+### Manual Embedding Generation
+
+You can generate embeddings using any embedding model:
+
+```javascript
+import { create, insert, search } from '@orama/orama'
+import OpenAI from 'openai'
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+async function generateEmbedding(text) {
+  const response = await openai.embeddings.create({
+    model: 'text-embedding-ada-002',
+    input: text
+  })
+  return response.data[0].embedding
+}
+
+const db = create({
+  schema: {
+    title: 'string',
+    embedding: 'vector[1536]'
+  }
+})
+
+const embedding = await generateEmbedding('Noise cancelling headphones')
+insert(db, {
+  title: 'Premium Headphones',
+  embedding
+})
+
+const queryEmbedding = await generateEmbedding('best headphones')
+const results = search(db, {
+  mode: 'vector',
+  vector: {
+    value: queryEmbedding,
+    property: 'embedding'
+  }
+})
+```
+
+## Performance Considerations
+
+<Steps>
+  <Step title="Choose Appropriate Vector Dimensions">
+    Smaller dimensions (384-512) are faster but less precise. Larger dimensions (1536) are more accurate but slower.
+  </Step>
+  
+  <Step title="Use Float32Array">
+    For better performance, use `Float32Array` instead of regular arrays:
+    ```javascript
+    const vector = new Float32Array([0.1, 0.2, 0.3, ...])
+    ```
+  </Step>
+  
+  <Step title="Set Appropriate Similarity Threshold">
+    Higher thresholds (0.9+) return fewer, more relevant results and are faster.
+  </Step>
+  
+  <Step title="Limit Result Count">
+    Use smaller `limit` values to improve performance:
+    ```javascript
+    search(db, { mode: 'vector', vector: {...}, limit: 5 })
+    ```
+  </Step>
+</Steps>
+
+## Combining with Filters
+
+You can combine vector search with filters:
+
+```javascript
+const results = search(db, {
+  mode: 'vector',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  where: {
+    price: {
+      lt: 100
+    }
+  }
+})
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Hybrid Search" icon="shuffle" href="/search/hybrid-search">
+    Combine vector and full-text search
+  </Card>
+  <Card title="Filters" icon="filter" href="/search/filters">
+    Filter vector search results
+  </Card>
+  <Card title="Facets" icon="list" href="/search/facets">
+    Generate facets from vector search results
+  </Card>
+  <Card title="Plugin Embeddings" icon="plug" href="/plugins/plugin-embeddings">
+    Auto-generate embeddings with TensorFlow.js
+  </Card>
+</CardGroup>

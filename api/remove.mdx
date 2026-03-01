@@ -1,0 +1,315 @@
+---
+title: remove()
+description: Remove a document from an Orama database instance
+---
+
+Removes a document from the Orama database by its ID. This operation removes the document from all indexes and the document store.
+
+## Function Signature
+
+```typescript
+function remove<T extends AnyOrama>(
+  orama: T,
+  id: DocumentID,
+  language?: string,
+  skipHooks?: boolean
+): Promise<boolean> | boolean
+```
+
+## Parameters
+
+<ParamField path="orama" type="Orama" required>
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="id" type="DocumentID" required>
+  The ID of the document to remove. Can be either a string or internal document ID.
+</ParamField>
+
+<ParamField path="language" type="string">
+  Optional language used when the document was indexed. Used for proper tokenization during removal.
+</ParamField>
+
+<ParamField path="skipHooks" type="boolean" default="false">
+  If true, skips executing beforeRemove and afterRemove hooks.
+</ParamField>
+
+## Returns
+
+<ResponseField name="success" type="boolean | Promise<boolean>">
+  Returns `true` if the document was successfully removed, `false` if the document was not found. Returns a Promise if async operations are required.
+</ResponseField>
+
+## Behavior
+
+- Checks if the document exists before attempting removal
+- Returns `false` if the document doesn't exist (no error thrown)
+- Triggers `beforeRemove` hook (if not skipped)
+- Removes the document from all search indexes
+- Removes the document from all sorting structures
+- Removes the document from the document store
+- Triggers `afterRemove` hook (if not skipped)
+- Automatically determines whether to run synchronously or asynchronously
+
+## Examples
+
+### Basic Remove
+
+```typescript
+import { create, insert, remove } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    price: 'number'
+  }
+})
+
+await insert(db, {
+  id: 'product-1',
+  title: 'Wireless Headphones',
+  price: 199.99
+})
+
+const success = await remove(db, 'product-1')
+console.log(success) // true
+
+const notFound = await remove(db, 'product-999')
+console.log(notFound) // false
+```
+
+### Remove with Error Handling
+
+```typescript
+const removeProduct = async (productId: string) => {
+  const removed = await remove(db, productId)
+  
+  if (removed) {
+    console.log(`Product ${productId} removed successfully`)
+  } else {
+    console.log(`Product ${productId} not found`)
+  }
+  
+  return removed
+}
+
+await removeProduct('product-1')
+```
+
+### Remove After Search
+
+```typescript
+import { search, remove } from '@orama/orama'
+
+const removeExpensiveProducts = async (maxPrice: number) => {
+  const results = await search(db, {
+    term: '',
+    where: {
+      price: { gt: maxPrice }
+    }
+  })
+  
+  const removed = []
+  for (const hit of results.hits) {
+    const success = await remove(db, hit.id)
+    if (success) {
+      removed.push(hit.id)
+    }
+  }
+  
+  return removed
+}
+
+const removedIds = await removeExpensiveProducts(1000)
+console.log(`Removed ${removedIds.length} expensive products`)
+```
+
+### Remove with Language
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    content: 'string'
+  }
+})
+
+// Insert with French language
+await insert(db, {
+  id: 'doc-fr-1',
+  title: 'Bonjour',
+  content: 'Contenu en français'
+}, 'french')
+
+// Remove with the same language
+const success = await remove(db, 'doc-fr-1', 'french')
+```
+
+### Soft Delete Pattern
+
+```typescript
+const db = await create({
+  schema: {
+    id: 'string',
+    title: 'string',
+    deleted: 'boolean',
+    deletedAt: 'string'
+  }
+})
+
+const softDelete = async (id: string) => {
+  const doc = await getByID(db, id)
+  
+  if (!doc) {
+    return false
+  }
+  
+  // Update instead of remove
+  await update(db, id, {
+    ...doc,
+    deleted: true,
+    deletedAt: new Date().toISOString()
+  })
+  
+  return true
+}
+
+const hardDelete = async (id: string) => {
+  return await remove(db, id)
+}
+```
+
+### Remove with Cleanup
+
+```typescript
+const deleteUserData = async (userId: string) => {
+  // Remove user document
+  const userRemoved = await remove(db, userId)
+  
+  // Remove related documents
+  const relatedDocs = await search(db, {
+    term: '',
+    where: { userId }
+  })
+  
+  for (const hit of relatedDocs.hits) {
+    await remove(db, hit.id)
+  }
+  
+  return userRemoved
+}
+
+await deleteUserData('user-123')
+```
+
+### Conditional Remove
+
+```typescript
+const removeIfOutdated = async (docId: string, maxAge: number) => {
+  const doc = await getByID(db, docId)
+  
+  if (!doc) {
+    return false
+  }
+  
+  const age = Date.now() - new Date(doc.createdAt).getTime()
+  
+  if (age > maxAge) {
+    return await remove(db, docId)
+  }
+  
+  return false
+}
+
+// Remove documents older than 30 days
+const thirtyDays = 30 * 24 * 60 * 60 * 1000
+await removeIfOutdated('doc-1', thirtyDays)
+```
+
+### Batch Remove with Count
+
+```typescript
+const removeByCategory = async (category: string) => {
+  const results = await search(db, {
+    term: '',
+    where: { category }
+  })
+  
+  let removed = 0
+  let failed = 0
+  
+  for (const hit of results.hits) {
+    const success = await remove(db, hit.id)
+    if (success) {
+      removed++
+    } else {
+      failed++
+    }
+  }
+  
+  return { removed, failed, total: results.count }
+}
+
+const result = await removeByCategory('Electronics')
+console.log(`Removed: ${result.removed}, Failed: ${result.failed}`)
+```
+
+### Undo Remove Pattern
+
+```typescript
+const removedDocuments = new Map()
+
+const removeWithUndo = async (id: string) => {
+  const doc = await getByID(db, id)
+  
+  if (!doc) {
+    return false
+  }
+  
+  // Store document for potential undo
+  removedDocuments.set(id, doc)
+  
+  return await remove(db, id)
+}
+
+const undoRemove = async (id: string) => {
+  const doc = removedDocuments.get(id)
+  
+  if (!doc) {
+    return false
+  }
+  
+  await insert(db, doc)
+  removedDocuments.delete(id)
+  
+  return true
+}
+
+await removeWithUndo('product-1')
+// Oops, made a mistake!
+await undoRemove('product-1')
+```
+
+## Important Notes
+
+- Returns `false` instead of throwing an error when the document doesn't exist
+- The document is removed from all indexes and cannot be searched or retrieved after removal
+- For batch removal operations, use [`removeMultiple()`](/api/remove-multiple) for better performance
+- The operation cannot be automatically undone - consider implementing soft deletes for recoverable deletion
+- All hooks are called with the document ID and current document data
+
+## Performance Considerations
+
+- Removal requires updating all indexes that contain the document
+- The operation is generally fast but scales with the number of indexed properties
+- For removing many documents, use `removeMultiple()` to benefit from batching
+- Consider the impact on search indexes when frequently removing and re-adding documents
+
+## See Also
+
+- [removeMultiple()](/api/remove-multiple) - Remove multiple documents
+- [insert()](/api/insert) - Insert a document
+- [update()](/api/update) - Update a document
+- [getByID()](/api/get-by-id) - Retrieve a document by ID

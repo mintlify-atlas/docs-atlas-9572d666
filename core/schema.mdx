@@ -1,0 +1,302 @@
+---
+title: Schema
+description: Define the structure and types of your searchable documents
+---
+
+The schema defines the structure of documents in your Orama database. It specifies which fields are searchable and what type of data each field contains.
+
+## Schema Definition
+
+Define a schema by mapping property names to their types:
+
+```typescript
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    price: 'number',
+    inStock: 'boolean',
+    category: 'enum'
+  }
+})
+```
+
+## Supported Types
+
+Orama supports the following field types:
+
+### Scalar Types
+
+| Type | TypeScript Type | Description | Example |
+|------|----------------|-------------|----------|
+| `string` | `string` | Full-text searchable text | `"Wireless Headphones"` |
+| `number` | `number` | Numeric values with range queries | `99.99` |
+| `boolean` | `boolean` | True/false values | `true` |
+| `enum` | `string \| number` | Enumerated values (exact match) | `"electronics"` |
+| `geopoint` | `{ lat: number, lon: number }` | Geographic coordinates | `{ lat: 40.7128, lon: -74.0060 }` |
+
+### Array Types
+
+All scalar types (except geopoint) support array variants:
+
+```typescript
+const db = await create({
+  schema: {
+    tags: 'string[]',        // Array of strings
+    ratings: 'number[]',      // Array of numbers
+    features: 'boolean[]',    // Array of booleans
+    categories: 'enum[]'      // Array of enums
+  }
+})
+```
+
+### Vector Types
+
+For semantic search and similarity matching:
+
+```typescript
+const db = await create({
+  schema: {
+    title: 'string',
+    embedding: 'vector[1536]'  // 1536-dimensional vector
+  }
+})
+```
+
+<Note>
+  The number in brackets specifies the vector dimension. All vectors for a given property must have the same dimension.
+</Note>
+
+## Nested Objects
+
+Schemas support nested object structures:
+
+```typescript
+const db = await create({
+  schema: {
+    title: 'string',
+    author: {
+      name: 'string',
+      email: 'string',
+      verified: 'boolean'
+    },
+    metadata: {
+      created: 'number',
+      tags: 'string[]'
+    }
+  }
+})
+```
+
+### Searching Nested Properties
+
+Use dot notation to search nested properties:
+
+```typescript
+const results = await search(db, {
+  term: 'john',
+  properties: ['author.name', 'author.email']
+})
+```
+
+### Filtering Nested Properties
+
+```typescript
+const results = await search(db, {
+  term: 'database',
+  where: {
+    'author.verified': true,
+    'metadata.created': { gte: 1640000000 }
+  }
+})
+```
+
+## Type Inference
+
+Orama provides full TypeScript type inference for your schema:
+
+```typescript
+import { create, insert, search } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    price: 'number',
+    inStock: 'boolean'
+  }
+})
+
+// TypeScript knows the document structure
+await insert(db, {
+  title: 'Laptop',      // ✓ string
+  price: 999.99,        // ✓ number
+  inStock: true         // ✓ boolean
+  // unknownField: 'x'  // ✗ TypeScript error
+})
+
+const results = await search(db, {
+  term: 'laptop'
+})
+
+// TypeScript knows the result structure
+results.hits[0].document.title   // ✓ string
+results.hits[0].document.price   // ✓ number
+```
+
+## Schema Type Mappings
+
+From `types.ts:67-92`, here's how schema types map to TypeScript types:
+
+```typescript
+type SchemaTypes<Value> = 
+  Value extends 'string' ? string :
+  Value extends 'string[]' ? string[] :
+  Value extends 'boolean' ? boolean :
+  Value extends 'boolean[]' ? boolean[] :
+  Value extends 'number' ? number :
+  Value extends 'number[]' ? number[] :
+  Value extends 'enum' ? string | number :
+  Value extends 'enum[]' ? (string | number)[] :
+  Value extends 'geopoint' ? Point :
+  Value extends `vector[${number}]` ? number[] :
+  Value extends object ? { [Key in keyof Value]: SchemaTypes<Value[Key]> } :
+  never
+```
+
+## String vs Enum
+
+Choose the right type for your use case:
+
+### Use `string` for:
+
+- Full-text search
+- Content that should be tokenized
+- Text with multiple words
+- Fuzzy matching
+
+```typescript
+schema: {
+  title: 'string',        // "Wireless Bluetooth Headphones"
+  description: 'string'   // "High-quality audio with..."
+}
+```
+
+### Use `enum` for:
+
+- Exact matching
+- Categories and tags
+- Single-word values
+- Filtering without tokenization
+
+```typescript
+schema: {
+  category: 'enum',       // "electronics"
+  status: 'enum',         // "active"
+  priority: 'enum'        // 1, 2, 3
+}
+```
+
+## Schema Validation
+
+Orama validates documents against the schema during insertion:
+
+```typescript
+const db = await create({
+  schema: {
+    title: 'string',
+    price: 'number'
+  }
+})
+
+// ✓ Valid document
+await insert(db, {
+  title: 'Product',
+  price: 29.99
+})
+
+// ✗ Invalid: price should be number
+await insert(db, {
+  title: 'Product',
+  price: '29.99'  // Error: type mismatch
+})
+```
+
+### Custom Validation
+
+You can provide a custom validation function:
+
+```typescript
+const db = await create({
+  schema: { /* ... */ },
+  components: {
+    validateSchema: (doc, schema) => {
+      // Return property name if invalid, undefined if valid
+      if (doc.price && doc.price < 0) {
+        return 'price'
+      }
+      return undefined
+    }
+  }
+})
+```
+
+## Searchable vs Sortable
+
+All schema properties are searchable by default. For sorting configuration, see the [Database](/core/database) page.
+
+<Warning>
+  Array properties (`string[]`, `number[]`, etc.) cannot be used for sorting.
+  Enum and geopoint types also cannot be sorted.
+</Warning>
+
+## Schema Immutability
+
+<Check>
+  Schemas are immutable after database creation. You cannot add or remove properties from an existing database.
+</Check>
+
+To modify a schema:
+
+1. Create a new database with the updated schema
+2. Export data from the old database
+3. Import data into the new database
+
+```typescript
+import { create, insertMultiple, search } from '@orama/orama'
+
+// Old database
+const oldDb = await create({
+  schema: { title: 'string', price: 'number' }
+})
+
+// Get all documents
+const allDocs = await search(oldDb, { term: '' })
+
+// New database with updated schema
+const newDb = await create({
+  schema: {
+    title: 'string',
+    price: 'number',
+    category: 'enum'  // New field
+  }
+})
+
+// Migrate data
+await insertMultiple(newDb, allDocs.hits.map(hit => ({
+  ...hit.document,
+  category: 'default'
+})))
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Documents" icon="file" href="/core/documents">
+    Learn how to insert and manage documents
+  </Card>
+  <Card title="Search" icon="magnifying-glass" href="/open-source/usage/search/introduction">
+    Start searching your data
+  </Card>
+</CardGroup>

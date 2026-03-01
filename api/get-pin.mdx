@@ -1,0 +1,255 @@
+---
+title: getPin()
+description: Retrieve a specific pinning rule by its ID
+---
+
+Get a specific pinning rule from the database by its ID. Returns the rule object if found, or `undefined` if no rule with that ID exists.
+
+## Signature
+
+```typescript
+function getPin<T extends AnyOrama>(
+  orama: T,
+  ruleId: string
+): PinRule | undefined
+```
+
+## Parameters
+
+<ParamField path="orama" type="AnyOrama" required>
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="ruleId" type="string" required>
+  The unique ID of the pinning rule to retrieve.
+</ParamField>
+
+## Returns
+
+<ResponseField name="rule" type="PinRule | undefined">
+  The pinning rule object if found, or `undefined` if not found.
+  
+  <Expandable title="PinRule structure">
+    <ResponseField name="id" type="string">
+      The unique identifier of the rule.
+    </ResponseField>
+    
+    <ResponseField name="conditions" type="PinCondition[]">
+      Array of conditions that must match:
+      - `anchoring`: `'is'` | `'starts_with'` | `'contains'`
+      - `pattern`: The pattern to match
+    </ResponseField>
+    
+    <ResponseField name="consequence" type="object">
+      Actions to take when conditions match:
+      - `promote`: Array of `{ doc_id: string, position: number }`
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Basic Retrieval
+
+```typescript
+import { create, insertPin, getPin } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string'
+  }
+})
+
+// Insert a pinning rule
+insertPin(db, {
+  id: 'featured-products',
+  conditions: [
+    { anchoring: 'contains', pattern: 'featured' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: '2', position: 0 }
+    ]
+  }
+})
+
+// Retrieve the rule
+const rule = getPin(db, 'featured-products')
+console.log(rule)
+// {
+//   id: 'featured-products',
+//   conditions: [{ anchoring: 'contains', pattern: 'featured' }],
+//   consequence: { promote: [{ doc_id: '2', position: 0 }] }
+// }
+```
+
+### Check if Rule Exists
+
+```typescript
+const ruleId = 'my-rule'
+const rule = getPin(db, ruleId)
+
+if (rule) {
+  console.log('Rule exists:', rule)
+} else {
+  console.log('Rule not found')
+}
+```
+
+### Inspect Rule Details
+
+```typescript
+const rule = getPin(db, 'holiday-promo')
+
+if (rule) {
+  console.log('Rule ID:', rule.id)
+  console.log('Number of conditions:', rule.conditions.length)
+  console.log('Number of promoted docs:', rule.consequence.promote.length)
+  
+  // List all promoted documents
+  for (const promotion of rule.consequence.promote) {
+    console.log(`Document ${promotion.doc_id} at position ${promotion.position}`)
+  }
+}
+```
+
+### Clone and Modify Pattern
+
+```typescript
+import { getPin, insertPin } from '@orama/orama'
+
+// Get existing rule
+const originalRule = getPin(db, 'summer-sale')
+
+if (originalRule) {
+  // Create a similar rule with a new ID
+  insertPin(db, {
+    id: 'fall-sale',
+    conditions: originalRule.conditions,
+    consequence: originalRule.consequence
+  })
+}
+```
+
+### Safe Update Pattern
+
+```typescript
+import { getPin, updatePin } from '@orama/orama'
+
+const ruleId = 'featured-products'
+const rule = getPin(db, ruleId)
+
+if (rule) {
+  // Modify specific field while keeping others
+  updatePin(db, {
+    ...rule,
+    consequence: {
+      promote: [
+        { doc_id: '5', position: 0 } // New promoted document
+      ]
+    }
+  })
+}
+```
+
+### Export Rule Configuration
+
+```typescript
+const rule = getPin(db, 'best-sellers')
+
+if (rule) {
+  // Save to file or database
+  const ruleJson = JSON.stringify(rule, null, 2)
+  console.log(ruleJson)
+  // Can be used to restore the rule later
+}
+```
+
+### Validate Rule Before Operation
+
+```typescript
+function updatePinIfExists(db, ruleId, newPattern) {
+  const rule = getPin(db, ruleId)
+  
+  if (!rule) {
+    throw new Error(`Rule '${ruleId}' does not exist`)
+  }
+  
+  updatePin(db, {
+    ...rule,
+    conditions: [
+      { anchoring: 'contains', pattern: newPattern }
+    ]
+  })
+}
+
+try {
+  updatePinIfExists(db, 'my-rule', 'new pattern')
+} catch (error) {
+  console.error(error.message)
+}
+```
+
+### Compare Rule Versions
+
+```typescript
+const oldRule = getPin(db, 'promo-rule')
+console.log('Before update:', oldRule)
+
+updatePin(db, {
+  id: 'promo-rule',
+  conditions: [{ anchoring: 'is', pattern: 'exact match' }],
+  consequence: { promote: [{ doc_id: '10', position: 0 }] }
+})
+
+const newRule = getPin(db, 'promo-rule')
+console.log('After update:', newRule)
+```
+
+### Debug Pinning Issues
+
+```typescript
+import { getPin, search } from '@orama/orama'
+
+// Check if a specific rule exists and matches your search
+const searchTerm = 'featured products'
+const rule = getPin(db, 'featured-products')
+
+if (rule) {
+  console.log('Rule found:', rule)
+  
+  // Manually check if conditions would match
+  const wouldMatch = rule.conditions.every(condition => {
+    const normalized = searchTerm.toLowerCase().trim()
+    const pattern = condition.pattern.toLowerCase().trim()
+    
+    switch (condition.anchoring) {
+      case 'is': return normalized === pattern
+      case 'starts_with': return normalized.startsWith(pattern)
+      case 'contains': return normalized.includes(pattern)
+      default: return false
+    }
+  })
+  
+  console.log('Would match search term:', wouldMatch)
+} else {
+  console.log('Rule not found')
+}
+```
+
+## Notes
+
+- Returns `undefined` (not `null`) when the rule is not found
+- The returned object is the actual rule stored in the database
+- You can safely modify the returned object for use with `updatePin()` or `insertPin()`
+- Use this function to inspect rules for debugging or validation
+- Useful for implementing "get or create" patterns with pinning rules
+
+## Related
+
+- [insertPin()](/api/insert-pin)
+- [updatePin()](/api/update-pin)
+- [deletePin()](/api/delete-pin)
+- [getAllPins()](/api/get-all-pins)
+- [Pinning Guide](/search/pinning)

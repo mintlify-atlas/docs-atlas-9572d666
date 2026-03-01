@@ -1,0 +1,527 @@
+---
+title: Components
+description: Customize Orama's internal components for advanced use cases
+---
+
+Orama is built on a modular architecture where core functionality is implemented through customizable components. You can replace default components with custom implementations to extend or modify behavior.
+
+## Overview
+
+Components are the building blocks of an Orama database:
+
+- **Tokenizer** - Splits text into searchable tokens
+- **Index** - Stores and searches indexed data
+- **Documents Store** - Manages document storage
+- **Sorter** - Handles sorting operations
+- **Function Components** - Utilities for validation and formatting
+
+## Component Types
+
+From `types.ts:1105-1118`:
+
+```typescript
+interface ObjectComponents<I, D, So, Pi> {
+  tokenizer: Tokenizer | DefaultTokenizerConfig
+  index: I
+  documentsStore: D
+  sorter: So
+  pinning: Pi
+}
+
+interface FunctionComponents<S> {
+  validateSchema(doc: AnyDocument, schema: S): string | undefined
+  getDocumentIndexId(doc: AnyDocument): string
+  getDocumentProperties(doc: AnyDocument, paths: string[]): Record<string, any>
+  formatElapsedTime(number: bigint): ElapsedTime
+}
+```
+
+## Tokenizer
+
+The tokenizer breaks text into searchable tokens.
+
+### Default Tokenizer Configuration
+
+```typescript
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: { title: 'string', description: 'string' },
+  components: {
+    tokenizer: {
+      language: 'english',
+      stemming: true,
+      stopWords: true,
+      allowDuplicates: false
+    }
+  }
+})
+```
+
+### Tokenizer Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `language` | `Language` | `'english'` | Language for tokenization rules |
+| `stemming` | `boolean` | `false` | Enable word stemming |
+| `stemmer` | `(word: string) => string` | - | Custom stemmer function |
+| `stemmerSkipProperties` | `string[]` | `[]` | Properties to skip stemming |
+| `tokenizeSkipProperties` | `string[]` | `[]` | Properties to skip tokenization |
+| `stopWords` | `boolean \| string[]` | `false` | Enable/provide stop words |
+| `allowDuplicates` | `boolean` | `false` | Allow duplicate tokens |
+
+### Custom Tokenizer
+
+Implement a custom tokenizer:
+
+```typescript
+import { Tokenizer } from '@orama/orama'
+
+const customTokenizer: Tokenizer = {
+  language: 'custom',
+  normalizationCache: new Map(),
+  tokenize: (text: string, language?: string, prop?: string) => {
+    // Custom tokenization logic
+    return text
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(token => token.length > 2)
+  }
+}
+
+const db = await create({
+  schema: { /* ... */ },
+  components: { tokenizer: customTokenizer }
+})
+```
+
+### Stemming
+
+Stemming reduces words to their root form:
+
+```typescript
+components: {
+  tokenizer: {
+    language: 'english',
+    stemming: true
+  }
+}
+
+// "running" → "run"
+// "flies" → "fli"
+// "better" → "better"
+```
+
+From `components/tokenizer/index.ts:95-164`:
+
+```typescript
+function createTokenizer(config: DefaultTokenizerConfig): DefaultTokenizer {
+  // Handle stemming
+  let stemmer: Optional<Stemmer>
+  
+  if (config.stemming || config.stemmer) {
+    if (config.stemmer) {
+      stemmer = config.stemmer
+    } else if (config.language === 'english') {
+      stemmer = english
+    }
+  }
+  
+  return {
+    tokenize,
+    language: config.language,
+    stemmer,
+    stemmerSkipProperties: new Set(config.stemmerSkipProperties || []),
+    tokenizeSkipProperties: new Set(config.tokenizeSkipProperties || []),
+    stopWords: /* ... */,
+    allowDuplicates: Boolean(config.allowDuplicates),
+    normalizationCache: new Map()
+  }
+}
+```
+
+### Stop Words
+
+Remove common words from indexing:
+
+```typescript
+components: {
+  tokenizer: {
+    stopWords: ['the', 'a', 'an', 'and', 'or', 'but']
+  }
+}
+```
+
+Or use a custom function:
+
+```typescript
+components: {
+  tokenizer: {
+    stopWords: (defaultStopWords) => {
+      return [...defaultStopWords, 'custom', 'words']
+    }
+  }
+}
+```
+
+### Supported Languages
+
+From `components/tokenizer/languages.ts:1-32`, Orama supports 30+ languages:
+
+```typescript
+const SUPPORTED_LANGUAGES = [
+  'arabic', 'armenian', 'bulgarian', 'czech', 'danish',
+  'dutch', 'english', 'finnish', 'french', 'german',
+  'greek', 'hungarian', 'indian', 'indonesian', 'irish',
+  'italian', 'lithuanian', 'nepali', 'norwegian', 'portuguese',
+  'romanian', 'russian', 'serbian', 'slovenian', 'spanish',
+  'swedish', 'tamil', 'turkish', 'ukrainian', 'sanskrit'
+]
+```
+
+Each language has custom tokenization rules and character support.
+
+## Index Component
+
+The index component manages searchable data structures.
+
+### Default Index
+
+The default index uses multiple tree structures:
+
+- **Radix Tree** - For string full-text search
+- **AVL Tree** - For numeric range queries
+- **Bool Node** - For boolean values
+- **Flat Tree** - For enum types
+- **BKD Tree** - For geospatial data
+- **Vector Index** - For vector similarity
+
+From `components/index.ts:67-77`:
+
+```typescript
+interface Index {
+  sharedInternalDocumentStore: InternalDocumentIDStore
+  indexes: Record<string, Tree>
+  vectorIndexes: Record<string, TTree<'Vector', VectorIndex>>
+  searchableProperties: string[]
+  searchablePropertiesWithTypes: Record<string, SearchableType>
+  frequencies: FrequencyMap
+  tokenOccurrences: Record<string, Record<string, number>>
+  avgFieldLength: Record<string, number>
+  fieldLengths: Record<string, Record<InternalDocumentID, number>>
+}
+```
+
+### Custom Index
+
+Implement the `IIndex` interface:
+
+```typescript
+import { IIndex } from '@orama/orama'
+
+const customIndex: IIndex<CustomIndexStore> = {
+  create: (orama, internalDocStore, schema) => {
+    // Initialize custom index
+    return { /* custom index store */ }
+  },
+  insert: (impl, index, prop, id, internalId, value, type, language, tokenizer, docsCount) => {
+    // Insert logic
+  },
+  remove: (impl, index, prop, id, internalId, value, type, language, tokenizer, docsCount) => {
+    // Remove logic
+  },
+  search: (index, term, tokenizer, language, properties, exact, tolerance, boost, relevance, docsCount, whereFilters, threshold) => {
+    // Search logic
+    return [] // TokenScore[]
+  },
+  // ... other required methods
+}
+```
+
+## Documents Store Component
+
+Manages document storage and retrieval.
+
+From `components/documents-store.ts:10-14`:
+
+```typescript
+interface DocumentsStore {
+  sharedInternalDocumentStore: InternalDocumentIDStore
+  docs: Record<InternalDocumentID, AnyDocument>
+  count: number
+}
+```
+
+### Custom Document Store
+
+Implement the `IDocumentsStore` interface:
+
+```typescript
+import { IDocumentsStore, AnyOrama } from '@orama/orama'
+
+const customDocStore: IDocumentsStore<CustomStore> = {
+  create: (orama, internalDocStore) => {
+    return { /* custom store */ }
+  },
+  get: (store, id) => {
+    // Retrieve document by ID
+    return document
+  },
+  getMultiple: (store, ids) => {
+    // Retrieve multiple documents
+    return documents
+  },
+  getAll: (store) => {
+    // Return all documents
+    return allDocuments
+  },
+  store: (store, id, internalId, doc) => {
+    // Store document
+    return true
+  },
+  remove: (store, id, internalId) => {
+    // Remove document
+    return true
+  },
+  count: (store) => {
+    // Return document count
+    return store.count
+  },
+  load: (internalDocStore, raw) => {
+    // Deserialize
+    return store
+  },
+  save: (store) => {
+    // Serialize
+    return serialized
+  }
+}
+```
+
+## Sorter Component
+
+Manages sorting functionality.
+
+From `components/sorter.ts:33-41`:
+
+```typescript
+interface Sorter {
+  sharedInternalDocumentStore: InternalDocumentIDStore
+  isSorted: boolean
+  language: string
+  enabled: boolean
+  sortableProperties: string[]
+  sortablePropertiesWithTypes: Record<string, SortType>
+  sorts: Record<string, PropertySort<number | string | boolean>>
+}
+```
+
+### Custom Sorter
+
+Implement the `ISorter` interface:
+
+```typescript
+import { ISorter, SorterParams } from '@orama/orama'
+
+const customSorter: ISorter<CustomSorterStore> = {
+  create: (orama, internalDocStore, schema, config) => {
+    return { /* custom sorter */ }
+  },
+  insert: (sorter, prop, id, value, schemaType, language) => {
+    // Track value for sorting
+  },
+  remove: (sorter, prop, id) => {
+    // Remove from sort index
+  },
+  sortBy: (sorter, docIds, by) => {
+    // Sort documents
+    return sortedDocIds
+  },
+  getSortableProperties: (sorter) => {
+    return sorter.sortableProperties
+  },
+  getSortablePropertiesWithTypes: (sorter) => {
+    return sorter.sortablePropertiesWithTypes
+  },
+  load: (internalDocStore, raw) => {
+    return sorter
+  },
+  save: (sorter) => {
+    return serialized
+  }
+}
+```
+
+## Function Components
+
+### Custom Schema Validation
+
+```typescript
+const db = await create({
+  schema: { /* ... */ },
+  components: {
+    validateSchema: (doc, schema) => {
+      // Custom validation logic
+      // Return property name if invalid, undefined if valid
+      if (doc.email && !doc.email.includes('@')) {
+        return 'email'
+      }
+      return undefined
+    }
+  }
+})
+```
+
+### Custom ID Generation
+
+```typescript
+import { nanoid } from 'nanoid'
+
+const db = await create({
+  schema: { /* ... */ },
+  components: {
+    getDocumentIndexId: (doc) => {
+      return doc.id || `doc-${nanoid()}`
+    }
+  }
+})
+```
+
+### Custom Time Formatting
+
+```typescript
+const db = await create({
+  schema: { /* ... */ },
+  components: {
+    formatElapsedTime: (nanoseconds) => {
+      const ms = Number(nanoseconds) / 1_000_000
+      return {
+        raw: Number(nanoseconds),
+        formatted: `${ms.toFixed(2)}ms`
+      }
+    }
+  }
+})
+```
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="External storage integration">
+    Replace the document store to store documents in an external database:
+    ```typescript
+    const dbDocStore: IDocumentsStore<CustomStore> = {
+      store: async (store, id, internalId, doc) => {
+        await redis.set(id, JSON.stringify(doc))
+        return true
+      },
+      get: async (store, id) => {
+        const doc = await redis.get(id)
+        return JSON.parse(doc)
+      },
+      // ... other methods
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Domain-specific tokenization">
+    Create a tokenizer for code search:
+    ```typescript
+    const codeTokenizer: Tokenizer = {
+      language: 'code',
+      normalizationCache: new Map(),
+      tokenize: (text) => {
+        // Split on camelCase, snake_case, etc.
+        return text
+          .replace(/([a-z])([A-Z])/g, '$1 $2')
+          .toLowerCase()
+          .split(/[^a-z0-9]+/)
+          .filter(Boolean)
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Custom ranking algorithm">
+    Implement a custom index with different scoring:
+    ```typescript
+    const customIndex: IIndex<CustomIndexStore> = {
+      calculateResultScores: (index, prop, term, ids, docsCount, bm25, resultsMap, boost) => {
+        // Custom scoring logic (e.g., TF-IDF, BM25F, neural ranking)
+        for (const id of ids) {
+          const score = calculateCustomScore(id, term)
+          resultsMap.set(id, score * boost)
+        }
+      },
+      // ... other methods
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Language-specific stemming">
+    Add custom stemming for unsupported languages:
+    ```typescript
+    components: {
+      tokenizer: {
+        language: 'custom',
+        stemming: true,
+        stemmer: (word) => {
+          // Custom stemming rules
+          return customStemFunction(word)
+        }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Component Validation
+
+From `methods/create.ts:42-74`, Orama validates custom components:
+
+```typescript
+function validateComponents(components: Components) {
+  // Validate function components
+  for (const key of FUNCTION_COMPONENTS) {
+    if (components[key]) {
+      if (typeof components[key] !== 'function') {
+        throw createError('COMPONENT_MUST_BE_FUNCTION', key)
+      }
+    }
+  }
+  
+  // Check for unsupported components
+  for (const key of Object.keys(components)) {
+    if (!OBJECT_COMPONENTS.includes(key) && !FUNCTION_COMPONENTS.includes(key)) {
+      throw createError('UNSUPPORTED_COMPONENT', key)
+    }
+  }
+}
+```
+
+<Warning>
+  Custom components must implement all required interface methods. Missing methods will cause runtime errors.
+</Warning>
+
+## Best Practices
+
+<Check>
+  Start with default components and customize only what you need. The defaults are optimized for most use cases.
+</Check>
+
+1. **Test thoroughly** - Custom components affect core functionality
+2. **Match interfaces** - Implement all required methods exactly
+3. **Handle errors** - Add proper error handling in custom logic
+4. **Consider performance** - Custom components can impact speed
+5. **Document behavior** - Explain custom component logic for maintainability
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Database" icon="database" href="/core/database">
+    Learn about database configuration
+  </Card>
+  <Card title="Plugins" icon="plug" href="/open-source/plugins/introduction">
+    Extend functionality with plugins
+  </Card>
+</CardGroup>

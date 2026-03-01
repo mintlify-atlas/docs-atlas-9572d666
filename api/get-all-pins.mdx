@@ -1,0 +1,307 @@
+---
+title: getAllPins()
+description: Retrieve all pinning rules from the database
+---
+
+Get all pinning rules stored in the database. Returns an array of all rule objects, or an empty array if no rules exist.
+
+## Signature
+
+```typescript
+function getAllPins<T extends AnyOrama>(
+  orama: T
+): PinRule[]
+```
+
+## Parameters
+
+<ParamField path="orama" type="AnyOrama" required>
+  The Orama database instance.
+</ParamField>
+
+## Returns
+
+<ResponseField name="rules" type="PinRule[]">
+  Array of all pinning rules. Each rule contains:
+  
+  - `id`: Unique identifier
+  - `conditions`: Array of match conditions
+  - `consequence`: Actions to take (promoted documents)
+  
+  Returns an empty array `[]` if no rules exist.
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { create, insertPin, getAllPins } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string'
+  }
+})
+
+// Insert some rules
+insertPin(db, {
+  id: 'featured-products',
+  conditions: [{ anchoring: 'contains', pattern: 'featured' }],
+  consequence: { promote: [{ doc_id: '2', position: 0 }] }
+})
+
+insertPin(db, {
+  id: 'best-sellers',
+  conditions: [{ anchoring: 'is', pattern: 'best sellers' }],
+  consequence: { promote: [{ doc_id: '10', position: 0 }] }
+})
+
+// Retrieve all rules
+const allRules = getAllPins(db)
+console.log(`Total rules: ${allRules.length}`) // 2
+
+for (const rule of allRules) {
+  console.log(`Rule ID: ${rule.id}`)
+}
+```
+
+### List All Promoted Documents
+
+```typescript
+const rules = getAllPins(db)
+
+for (const rule of rules) {
+  console.log(`Rule: ${rule.id}`)
+  console.log('Promoted documents:')
+  
+  for (const promotion of rule.consequence.promote) {
+    console.log(`  - Doc ${promotion.doc_id} at position ${promotion.position}`)
+  }
+}
+```
+
+### Export All Rules
+
+```typescript
+import { getAllPins } from '@orama/orama'
+import fs from 'fs'
+
+// Export to JSON file
+const rules = getAllPins(db)
+const rulesJson = JSON.stringify(rules, null, 2)
+fs.writeFileSync('pinning-rules-backup.json', rulesJson)
+
+console.log(`Exported ${rules.length} rules`)
+```
+
+### Import/Restore Rules
+
+```typescript
+import { insertPin, getAllPins } from '@orama/orama'
+import fs from 'fs'
+
+// Load rules from backup
+const rulesJson = fs.readFileSync('pinning-rules-backup.json', 'utf-8')
+const rules = JSON.parse(rulesJson)
+
+// Insert each rule
+for (const rule of rules) {
+  try {
+    insertPin(db, rule)
+  } catch (error) {
+    console.error(`Failed to import rule ${rule.id}:`, error.message)
+  }
+}
+
+console.log(`Imported ${rules.length} rules`)
+```
+
+### Count Rules by Condition Type
+
+```typescript
+const rules = getAllPins(db)
+
+const stats = {
+  is: 0,
+  starts_with: 0,
+  contains: 0
+}
+
+for (const rule of rules) {
+  for (const condition of rule.conditions) {
+    stats[condition.anchoring]++
+  }
+}
+
+console.log('Condition statistics:', stats)
+// { is: 5, starts_with: 3, contains: 12 }
+```
+
+### Find Rules by Pattern
+
+```typescript
+function findRulesByPattern(db, searchPattern) {
+  const allRules = getAllPins(db)
+  
+  return allRules.filter(rule =>
+    rule.conditions.some(condition =>
+      condition.pattern.includes(searchPattern)
+    )
+  )
+}
+
+const holidayRules = findRulesByPattern(db, 'holiday')
+console.log(`Found ${holidayRules.length} holiday-related rules`)
+```
+
+### Delete All Rules
+
+```typescript
+import { getAllPins, deletePin } from '@orama/orama'
+
+const rules = getAllPins(db)
+let deletedCount = 0
+
+for (const rule of rules) {
+  if (deletePin(db, rule.id)) {
+    deletedCount++
+  }
+}
+
+console.log(`Deleted ${deletedCount} of ${rules.length} rules`)
+```
+
+### Audit Pinning Configuration
+
+```typescript
+const rules = getAllPins(db)
+
+console.log('Pinning Rules Audit')
+console.log('===================')
+console.log(`Total rules: ${rules.length}`)
+
+if (rules.length === 0) {
+  console.log('No pinning rules configured')
+} else {
+  const totalPromotions = rules.reduce(
+    (sum, rule) => sum + rule.consequence.promote.length,
+    0
+  )
+  
+  const totalConditions = rules.reduce(
+    (sum, rule) => sum + rule.conditions.length,
+    0
+  )
+  
+  console.log(`Total promoted documents: ${totalPromotions}`)
+  console.log(`Total conditions: ${totalConditions}`)
+  console.log(`Average conditions per rule: ${(totalConditions / rules.length).toFixed(2)}`)
+}
+```
+
+### Validate All Rules
+
+```typescript
+function validateRules(db) {
+  const rules = getAllPins(db)
+  const issues = []
+  
+  for (const rule of rules) {
+    // Check for empty conditions
+    if (rule.conditions.length === 0) {
+      issues.push(`Rule '${rule.id}' has no conditions`)
+    }
+    
+    // Check for empty promotions
+    if (rule.consequence.promote.length === 0) {
+      issues.push(`Rule '${rule.id}' has no promoted documents`)
+    }
+    
+    // Check for invalid anchoring
+    for (const condition of rule.conditions) {
+      if (!['is', 'starts_with', 'contains'].includes(condition.anchoring)) {
+        issues.push(`Rule '${rule.id}' has invalid anchoring: ${condition.anchoring}`)
+      }
+    }
+  }
+  
+  return issues
+}
+
+const issues = validateRules(db)
+if (issues.length > 0) {
+  console.error('Validation issues found:')
+  issues.forEach(issue => console.error(`  - ${issue}`))
+} else {
+  console.log('All rules are valid')
+}
+```
+
+### Clone Rules to Another Database
+
+```typescript
+import { getAllPins, insertPin } from '@orama/orama'
+
+function cloneRules(sourceDb, targetDb) {
+  const rules = getAllPins(sourceDb)
+  let clonedCount = 0
+  
+  for (const rule of rules) {
+    try {
+      insertPin(targetDb, rule)
+      clonedCount++
+    } catch (error) {
+      console.error(`Failed to clone rule '${rule.id}':`, error.message)
+    }
+  }
+  
+  console.log(`Cloned ${clonedCount} of ${rules.length} rules`)
+}
+
+const db1 = await create({ schema: { title: 'string' } })
+const db2 = await create({ schema: { title: 'string' } })
+
+cloneRules(db1, db2)
+```
+
+### Generate Documentation
+
+```typescript
+const rules = getAllPins(db)
+
+console.log('# Pinning Rules Documentation\n')
+
+for (const rule of rules) {
+  console.log(`## ${rule.id}\n`)
+  console.log('**Conditions:**')
+  
+  for (const condition of rule.conditions) {
+    console.log(`- ${condition.anchoring}: "${condition.pattern}"`)
+  }
+  
+  console.log('\n**Promoted Documents:**')
+  for (const promo of rule.consequence.promote) {
+    console.log(`- Document ${promo.doc_id} at position ${promo.position}`)
+  }
+  
+  console.log('\n---\n')
+}
+```
+
+## Notes
+
+- Returns an empty array `[]` if no rules exist (never returns `null` or `undefined`)
+- The order of rules in the returned array is not guaranteed
+- Each rule object is the actual rule stored in the database
+- Useful for bulk operations, backups, audits, and migrations
+- Does not affect search performance - rules are applied during search
+
+## Related
+
+- [insertPin()](/api/insert-pin)
+- [updatePin()](/api/update-pin)
+- [deletePin()](/api/delete-pin)
+- [getPin()](/api/get-pin)
+- [Pinning Guide](/search/pinning)

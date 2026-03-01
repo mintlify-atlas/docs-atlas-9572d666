@@ -1,0 +1,228 @@
+---
+title: 'Match Highlight Plugin'
+description: 'Highlight search term matches in results (DEPRECATED)'
+icon: 'highlighter'
+---
+
+<Warning>
+  **This plugin is deprecated.** Please use [@orama/highlight](https://www.npmjs.com/package/@orama/highlight) instead.
+</Warning>
+
+## Deprecation Notice
+
+The Match Highlight Plugin has been deprecated in favor of the new **@orama/highlight** package, which offers:
+
+- **Better Performance**: Faster highlighting with lower memory footprint
+- **Easier to Use**: Simpler API and integration
+- **More Features**: Advanced highlighting options
+- **Active Maintenance**: Continued support and updates
+
+## Migration Guide
+
+### Old Approach (Deprecated)
+
+```javascript
+import { create, insert } from '@orama/orama'
+import { searchWithHighlight, afterInsert } from '@orama/plugin-match-highlight'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string'
+  },
+  plugins: [{
+    name: 'match-highlight',
+    afterInsert
+  }]
+})
+
+await insert(db, {
+  title: 'Wireless Headphones',
+  description: 'Premium noise-cancelling headphones'
+})
+
+const results = await searchWithHighlight(db, {
+  term: 'headphones'
+})
+```
+
+### New Approach (Recommended)
+
+```bash
+npm install @orama/highlight
+```
+
+```javascript
+import { create, insert, search } from '@orama/orama'
+import { highlight } from '@orama/highlight'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string'
+  }
+})
+
+await insert(db, {
+  title: 'Wireless Headphones',
+  description: 'Premium noise-cancelling headphones'
+})
+
+// Perform search
+const results = await search(db, {
+  term: 'headphones'
+})
+
+// Highlight matches in results
+const highlighted = results.hits.map(hit => ({
+  ...hit,
+  document: {
+    ...hit.document,
+    title: highlight(hit.document.title, 'headphones'),
+    description: highlight(hit.document.description, 'headphones')
+  }
+}))
+```
+
+## Why Use @orama/highlight?
+
+<CardGroup cols={2}>
+  <Card title="Performance" icon="gauge">
+    10x faster highlighting with minimal memory usage
+  </Card>
+  
+  <Card title="Simplicity" icon="wand-magic-sparkles">
+    No plugin configuration required, just call the function
+  </Card>
+  
+  <Card title="Flexibility" icon="sliders">
+    Customizable highlighting with HTML or custom markers
+  </Card>
+  
+  <Card title="Maintained" icon="wrench">
+    Active development and regular updates
+  </Card>
+</CardGroup>
+
+## @orama/highlight Features
+
+### Basic Highlighting
+
+```javascript
+import { highlight } from '@orama/highlight'
+
+const text = 'Wireless headphones with noise cancelling'
+const highlighted = highlight(text, 'headphones')
+// "Wireless <mark>headphones</mark> with noise cancelling"
+```
+
+### Custom HTML Tags
+
+```javascript
+const highlighted = highlight(text, 'headphones', {
+  tag: 'strong',
+  className: 'search-match'
+})
+// "Wireless <strong class=\"search-match\">headphones</strong> with noise cancelling"
+```
+
+### Case Insensitive
+
+```javascript
+const highlighted = highlight('Wireless Headphones', 'headphones', {
+  caseSensitive: false
+})
+// "Wireless <mark>Headphones</mark>"
+```
+
+### Multiple Terms
+
+```javascript
+const highlighted = highlight(text, ['wireless', 'headphones'])
+// "<mark>Wireless</mark> <mark>headphones</mark> with noise cancelling"
+```
+
+## Documentation
+
+For full documentation on @orama/highlight, visit:
+- [NPM Package](https://www.npmjs.com/package/@orama/highlight)
+- [GitHub Repository](https://github.com/oramasearch/orama)
+
+## Legacy Plugin Reference
+
+If you must continue using the deprecated plugin, here's the basic API:
+
+### Installation
+
+```bash
+npm install @orama/plugin-match-highlight
+```
+
+### API
+
+#### afterInsert()
+
+Plugin hook that stores position information for each inserted document.
+
+```typescript
+async function afterInsert<T extends AnyOrama>(
+  orama: T,
+  id: string
+): Promise<void>
+```
+
+#### searchWithHighlight()
+
+Performs a search and returns results with position information.
+
+```typescript
+async function searchWithHighlight<T extends AnyOrama, ResultDocument = TypedDocument<T>>(
+  orama: T,
+  params: SearchParamsFullText<T, ResultDocument>,
+  language?: Language
+): Promise<SearchResultWithHighlight<ResultDocument>>
+```
+
+#### saveWithHighlight()
+
+Saves the Orama instance including position data.
+
+```typescript
+function saveWithHighlight<T extends AnyOrama>(
+  orama: T
+): RawDataWithPositions
+```
+
+#### loadWithHighlight()
+
+Loads an Orama instance including position data.
+
+```typescript
+function loadWithHighlight<T extends AnyOrama>(
+  orama: T,
+  raw: RawDataWithPositions
+): void
+```
+
+## Support
+
+<Warning>
+  The Match Highlight Plugin will receive no further updates. Please migrate to @orama/highlight for continued support.
+</Warning>
+
+For issues or questions:
+- Use [@orama/highlight](https://www.npmjs.com/package/@orama/highlight) for new projects
+- File issues at [GitHub](https://github.com/oramasearch/orama)
+- Join the [Orama Discord](https://orama.com/discord) for help
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="@orama/highlight" icon="highlighter" href="https://www.npmjs.com/package/@orama/highlight">
+    Install the new highlighting package
+  </Card>
+  
+  <Card title="Search Guide" icon="magnifying-glass" href="/open-source/usage/search">
+    Learn more about search in Orama
+  </Card>
+</CardGroup>

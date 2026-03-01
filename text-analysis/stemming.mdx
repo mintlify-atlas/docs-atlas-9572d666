@@ -1,0 +1,397 @@
+---
+title: Stemming
+description: Reduce words to their root form for more flexible search results
+---
+
+Stemming is the process of reducing words to their base or root form. This improves search recall by matching different variations of the same word.
+
+For example:
+- "running", "runs", "ran" → "run"
+- "beautiful", "beautifully" → "beauti"
+- "connection", "connected", "connecting" → "connect"
+
+## How Stemming Works
+
+When stemming is enabled, Orama applies the stemming algorithm during both indexing and searching:
+
+```typescript
+// Document indexed:
+// "The developer is developing a new development"
+// Tokens after stemming: ["develop", "develop", "new", "develop"]
+
+// Search query:
+// "developer"
+// After stemming: "develop"
+
+// Result: Matches found!
+```
+
+<Note>
+Stemming is **disabled by default**. You must explicitly enable it in your tokenizer configuration.
+</Note>
+
+## Enabling Stemming
+
+### English Stemming
+
+For English, Orama includes a built-in Porter stemmer:
+
+```typescript
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    content: 'string'
+  },
+  components: {
+    tokenizer: {
+      language: 'english',
+      stemming: true  // Enable built-in English stemmer
+    }
+  }
+})
+
+await insert(db, {
+  title: 'Advanced Programming Techniques',
+  content: 'Learn programming through practical examples'
+})
+
+// Searches for "program", "programming", "programmer" all match
+const results = await search(db, {
+  term: 'programmer'
+})
+```
+
+### Other Languages
+
+For other languages, import the stemmer from `@orama/stemmers`:
+
+<CodeGroup>
+```typescript Italian
+import { create } from '@orama/orama'
+import { stemmer, language } from '@orama/stemmers/italian'
+
+const db = await create({
+  schema: {
+    title: 'string'
+  },
+  components: {
+    tokenizer: {
+      stemming: true,
+      stemmer,
+      language
+    }
+  }
+})
+```
+
+```typescript French
+import { create } from '@orama/orama'
+import { stemmer, language } from '@orama/stemmers/french'
+
+const db = await create({
+  schema: {
+    content: 'string'
+  },
+  components: {
+    tokenizer: {
+      stemming: true,
+      stemmer,
+      language
+    }
+  }
+})
+```
+
+```typescript German
+import { create } from '@orama/orama'
+import { stemmer, language } from '@orama/stemmers/german'
+
+const db = await create({
+  schema: {
+    description: 'string'
+  },
+  components: {
+    tokenizer: {
+      stemming: true,
+      stemmer,
+      language
+    }
+  }
+})
+```
+
+```typescript Spanish
+import { create } from '@orama/orama'
+import { stemmer, language } from '@orama/stemmers/spanish'
+
+const db = await create({
+  schema: {
+    text: 'string'
+  },
+  components: {
+    tokenizer: {
+      stemming: true,
+      stemmer,
+      language
+    }
+  }
+})
+```
+</CodeGroup>
+
+## Supported Languages
+
+Orama provides stemmers for 30 languages:
+
+<CardGroup cols={3}>
+  <Card title="Arabic" icon="language">@orama/stemmers/arabic</Card>
+  <Card title="Armenian" icon="language">@orama/stemmers/armenian</Card>
+  <Card title="Bulgarian" icon="language">@orama/stemmers/bulgarian</Card>
+  <Card title="Czech" icon="language">@orama/stemmers/czech</Card>
+  <Card title="Danish" icon="language">@orama/stemmers/danish</Card>
+  <Card title="Dutch" icon="language">@orama/stemmers/dutch</Card>
+  <Card title="English" icon="language">Built-in</Card>
+  <Card title="Finnish" icon="language">@orama/stemmers/finnish</Card>
+  <Card title="French" icon="language">@orama/stemmers/french</Card>
+  <Card title="German" icon="language">@orama/stemmers/german</Card>
+  <Card title="Greek" icon="language">@orama/stemmers/greek</Card>
+  <Card title="Hungarian" icon="language">@orama/stemmers/hungarian</Card>
+  <Card title="Indian" icon="language">@orama/stemmers/indian</Card>
+  <Card title="Indonesian" icon="language">@orama/stemmers/indonesian</Card>
+  <Card title="Irish" icon="language">@orama/stemmers/irish</Card>
+  <Card title="Italian" icon="language">@orama/stemmers/italian</Card>
+  <Card title="Lithuanian" icon="language">@orama/stemmers/lithuanian</Card>
+  <Card title="Nepali" icon="language">@orama/stemmers/nepali</Card>
+  <Card title="Norwegian" icon="language">@orama/stemmers/norwegian</Card>
+  <Card title="Portuguese" icon="language">@orama/stemmers/portuguese</Card>
+  <Card title="Romanian" icon="language">@orama/stemmers/romanian</Card>
+  <Card title="Russian" icon="language">@orama/stemmers/russian</Card>
+  <Card title="Sanskrit" icon="language">@orama/stemmers/sanskrit</Card>
+  <Card title="Serbian" icon="language">@orama/stemmers/serbian</Card>
+  <Card title="Slovenian" icon="language">@orama/stemmers/slovenian</Card>
+  <Card title="Spanish" icon="language">@orama/stemmers/spanish</Card>
+  <Card title="Swedish" icon="language">@orama/stemmers/swedish</Card>
+  <Card title="Tamil" icon="language">@orama/stemmers/tamil</Card>
+  <Card title="Turkish" icon="language">@orama/stemmers/turkish</Card>
+  <Card title="Ukrainian" icon="language">@orama/stemmers/ukrainian</Card>
+</CardGroup>
+
+<Warning>
+Chinese (Mandarin) and Japanese use specialized tokenizers instead of stemmers. See [Languages](/text-analysis/languages) for details.
+</Warning>
+
+## Skipping Stemming for Specific Properties
+
+You may want to disable stemming for certain fields:
+
+```typescript
+import { create } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    sku: 'string',
+    productName: 'string',
+    description: 'string'
+  },
+  components: {
+    tokenizer: {
+      language: 'english',
+      stemming: true,
+      // Don't stem product names or SKUs
+      stemmerSkipProperties: ['sku', 'productName']
+    }
+  }
+})
+
+await insert(db, {
+  sku: 'RUNNING-SHOES-2024',
+  productName: 'Nike Air Running Pro',
+  description: 'Perfect running shoes for professional runners'
+})
+
+// "RUNNING-SHOES-2024" is NOT stemmed (exact match required)
+// "Nike Air Running Pro" is NOT stemmed (exact product name)
+// "Perfect running shoes..." IS stemmed: ["perfect", "run", "shoe", ...]
+```
+
+<Note>
+Use `stemmerSkipProperties` for fields where exact word forms matter, such as product names, brand names, or technical identifiers.
+</Note>
+
+## English Porter Stemmer
+
+Orama's built-in English stemmer implements the Porter stemming algorithm with multiple transformation steps:
+
+```typescript
+// Example transformations:
+stemmer('running')      // "run"
+stemmer('flies')        // "fli"
+stemmer('died')         // "die"
+stemmer('agreed')       // "agre"
+stemmer('national')     // "nation"
+stemmer('traditional')  // "tradit"
+stemmer('connection')   // "connect"
+stemmer('activate')     // "activ"
+```
+
+The algorithm handles:
+- Plural forms ("cats" → "cat")
+- Past tense ("walked" → "walk")
+- Continuous forms ("running" → "run")
+- Adverbs ("quickly" → "quick")
+- Adjectives ("beautiful" → "beauti")
+- Nouns ("nationalism" → "nation")
+
+## Custom Stemmer
+
+Implement a custom stemmer for specialized vocabularies:
+
+```typescript
+import { create, Stemmer } from '@orama/orama'
+
+// Simple suffix-stripping stemmer
+const customStemmer: Stemmer = (word: string): string => {
+  // Remove common English suffixes
+  const suffixes = ['ing', 'ed', 'ly', 's', 'es']
+  
+  for (const suffix of suffixes) {
+    if (word.endsWith(suffix)) {
+      return word.slice(0, -suffix.length)
+    }
+  }
+  
+  return word
+}
+
+const db = await create({
+  schema: {
+    text: 'string'
+  },
+  components: {
+    tokenizer: {
+      language: 'english',
+      stemmer: customStemmer,
+      stemming: true
+    }
+  }
+})
+```
+
+<Warning>
+Custom stemmers should be deterministic and fast. The stemmer is called for every token during both indexing and searching.
+</Warning>
+
+## When to Use Stemming
+
+<AccordionGroup>
+  <Accordion title="Good Use Cases" icon="check">
+    - **General content search**: Blog posts, articles, documentation
+    - **E-commerce descriptions**: Product descriptions with natural language
+    - **Support systems**: Help articles, FAQs, knowledge bases
+    - **Social media**: Posts, comments, messages
+  </Accordion>
+  
+  <Accordion title="Avoid Stemming For" icon="xmark">
+    - **Technical terms**: API names, function names, code identifiers
+    - **Product codes**: SKUs, model numbers, part identifiers
+    - **Brand names**: Company names, product names
+    - **Proper nouns**: Person names, place names
+    - **Legal/medical text**: Where exact terminology matters
+  </Accordion>
+</AccordionGroup>
+
+## Performance Impact
+
+### Memory Usage
+Stemming typically **reduces index size by 15-30%** because different word forms map to the same stem:
+
+```typescript
+// Without stemming: 3 separate index entries
+["running", "runs", "runner"]
+
+// With stemming: 1 index entry
+["run"]
+```
+
+### Search Speed
+Stemming has **minimal impact on search performance** (typically less than 5% overhead) but can significantly improve recall.
+
+### Indexing Speed
+Each token requires stemming during insertion, adding approximately **10-20% overhead** to indexing time.
+
+## Stemming + Stopwords + Diacritics
+
+The normalization pipeline combines multiple text processing steps:
+
+```typescript
+import { create } from '@orama/orama'
+import { stemmer, language } from '@orama/stemmers/french'
+import { stopwords } from '@orama/stopwords/french'
+
+const db = await create({
+  schema: {
+    content: 'string'
+  },
+  components: {
+    tokenizer: {
+      language,
+      stemmer,
+      stemming: true,
+      stopWords: stopwords
+    }
+  }
+})
+
+// Input: "Les développeurs créent des applications"
+// After tokenization: ["les", "développeurs", "créent", "des", "applications"]
+// After stopwords: ["développeurs", "créent", "applications"] ("les", "des" removed)
+// After stemming: ["développ", "cré", "applic"]
+// After diacritics: ["developp", "cre", "applic"]
+```
+
+The processing order is:
+1. Tokenization (split text)
+2. Lowercase conversion
+3. Stopwords removal
+4. Stemming
+5. Diacritics removal
+6. Caching
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @orama/stemmers
+```
+
+```bash pnpm
+pnpm add @orama/stemmers
+```
+
+```bash yarn
+yarn add @orama/stemmers
+```
+
+```bash bun
+bun add @orama/stemmers
+```
+</CodeGroup>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Stopwords" icon="filter" href="/text-analysis/stopwords">
+    Remove common words that don't add meaning
+  </Card>
+  <Card title="Languages" icon="language" href="/text-analysis/languages">
+    See all supported languages and their features
+  </Card>
+  <Card title="Tokenization" icon="text" href="/text-analysis/tokenization">
+    Learn how text is split into tokens
+  </Card>
+  <Card title="Search" icon="magnifying-glass" href="/open-source/usage/search">
+    Use stemming to improve search results
+  </Card>
+</CardGroup>

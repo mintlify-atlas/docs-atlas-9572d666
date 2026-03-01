@@ -1,0 +1,463 @@
+---
+title: AnswerSession Configuration
+description: Configure and manage Answer Sessions for RAG-powered conversations
+---
+
+# AnswerSession Configuration
+
+The `AnswerSession` class manages conversational state, message history, and interactions with your Orama database. It provides a stateful interface for building chat experiences with proper context management.
+
+## Creating a Session
+
+Create a new Answer Session by providing your Orama database instance and configuration options:
+
+```typescript
+import { AnswerSession } from '@orama/orama'
+import type { IAnswerSessionConfig } from '@orama/orama'
+
+const session = new AnswerSession(db, {
+  conversationID: 'user-123-conv-1',
+  systemPrompt: 'You are a helpful customer support assistant.',
+  userContext: {
+    role: 'premium',
+    language: 'en'
+  },
+  initialMessages: [
+    { role: 'assistant', content: 'Hello! How can I help you today?' }
+  ],
+  events: {
+    onStateChange: (state) => {
+      console.log('Session state updated', state)
+    }
+  }
+})
+```
+
+## Configuration Options
+
+### `conversationID`
+
+<ParamField path="conversationID" type="string" optional>
+  A unique identifier for the conversation. If not provided, a random ID will be generated.
+</ParamField>
+
+```typescript
+const session = new AnswerSession(db, {
+  conversationID: 'conversation-abc-123'
+})
+```
+
+Use this to:
+- Track conversations across sessions
+- Implement conversation history persistence
+- Organize analytics by conversation
+
+### `systemPrompt`
+
+<ParamField path="systemPrompt" type="string" optional>
+  Instructions that define the AI assistant's behavior, personality, and response style.
+</ParamField>
+
+```typescript
+const session = new AnswerSession(db, {
+  systemPrompt: `You are a technical documentation assistant.
+  - Provide clear, concise answers
+  - Include code examples when relevant
+  - Always cite sources from the documentation
+  - Use a professional but friendly tone`
+})
+```
+
+<Tip>
+  System prompts are powerful! Use them to:
+  - Define the assistant's role and expertise
+  - Set response format requirements
+  - Establish tone and personality
+  - Add safety guidelines and constraints
+</Tip>
+
+### `userContext`
+
+<ParamField path="userContext" type="string | object" optional>
+  Additional context about the user or environment, passed to the AI model.
+</ParamField>
+
+```typescript
+const session = new AnswerSession(db, {
+  userContext: {
+    userId: 'user-123',
+    plan: 'enterprise',
+    preferences: {
+      codeStyle: 'typescript',
+      verbosity: 'detailed'
+    },
+    previousIssues: ['login-problems', 'api-rate-limits']
+  }
+})
+
+// Or as a simple string
+const simpleSession = new AnswerSession(db, {
+  userContext: 'User is a beginner learning JavaScript'
+})
+```
+
+User context helps the AI:
+- Personalize responses
+- Consider user preferences
+- Maintain consistency across conversations
+- Provide relevant suggestions
+
+### `initialMessages`
+
+<ParamField path="initialMessages" type="Message[]" optional>
+  Pre-populate the conversation with initial messages.
+</ParamField>
+
+```typescript
+import type { Message } from '@orama/orama'
+
+const session = new AnswerSession(db, {
+  initialMessages: [
+    {
+      role: 'system',
+      content: 'You are an expert in React development.'
+    },
+    {
+      role: 'assistant',
+      content: 'Welcome! I can help you with React questions.'
+    }
+  ]
+})
+```
+
+Message types:
+- `system` - Instructions for the AI (typically set via `systemPrompt`)
+- `user` - Messages from the user
+- `assistant` - Responses from the AI
+
+### `events`
+
+<ParamField path="events" type="AnswerSessionEvents" optional>
+  Event handlers for reacting to session state changes.
+</ParamField>
+
+```typescript
+import type { AnswerSessionEvents, Interaction } from '@orama/orama'
+
+const session = new AnswerSession(db, {
+  events: {
+    onStateChange: (state: Interaction[]) => {
+      // Update your UI reactively
+      const lastInteraction = state[state.length - 1]
+      
+      if (lastInteraction.loading) {
+        showLoadingIndicator()
+      }
+      
+      if (lastInteraction.response) {
+        updateChatUI(lastInteraction.response)
+      }
+      
+      if (lastInteraction.sources) {
+        displaySources(lastInteraction.sources)
+      }
+      
+      if (lastInteraction.error) {
+        showError(lastInteraction.errorMessage)
+      }
+    }
+  }
+})
+```
+
+## Session Methods
+
+### `ask(query)`
+
+Perform a search and generate a complete response.
+
+```typescript
+const response = await session.ask({
+  term: 'How do I configure vector search?',
+  properties: ['title', 'content'],
+  limit: 5
+})
+
+console.log(response) // Full AI-generated response
+```
+
+<ParamField path="query" type="AskParams" required>
+  Search parameters. Accepts all [SearchParams](/searching/introduction) options.
+</ParamField>
+
+**Returns:** `Promise<string>` - The complete generated response.
+
+### `askStream(query)`
+
+Perform a search and stream the response token-by-token.
+
+```typescript
+const stream = await session.askStream({
+  term: 'Explain hybrid search'
+})
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk) // Stream to console
+  // or updateUI(chunk) for real-time UI updates
+}
+```
+
+**Returns:** `Promise<AsyncGenerator<string>>` - An async generator that yields response chunks.
+
+<Tip>
+  Use `askStream()` for better user experience in chat UIs. Users see responses appear in real-time instead of waiting for the complete response.
+</Tip>
+
+### `abortAnswer()`
+
+Cancel an in-progress response generation.
+
+```typescript
+const stream = await session.askStream({ term: 'long query' })
+
+// Cancel after 2 seconds
+setTimeout(() => {
+  session.abortAnswer()
+  console.log('Request cancelled')
+}, 2000)
+
+for await (const chunk of stream) {
+  console.log(chunk)
+}
+```
+
+<Note>
+  After aborting, the interaction's `aborted` property will be set to `true` in the session state.
+</Note>
+
+### `getMessages()`
+
+Retrieve all messages in the current conversation.
+
+```typescript
+const messages = session.getMessages()
+
+messages.forEach((msg) => {
+  console.log(`${msg.role}: ${msg.content}`)
+})
+
+// Example output:
+// system: You are a helpful assistant
+// user: What is Orama?
+// assistant: Orama is a fast, batteries-included full-text search engine...
+```
+
+**Returns:** `Message[]` - Array of all conversation messages.
+
+### `clearSession()`
+
+Reset the conversation by clearing all messages and state.
+
+```typescript
+session.clearSession()
+
+console.log(session.getMessages()) // []
+console.log(session.state) // []
+```
+
+<Warning>
+  This action cannot be undone. Consider implementing conversation persistence before clearing sessions.
+</Warning>
+
+### `regenerateLast(options)`
+
+Regenerate the last assistant response.
+
+```typescript
+// Regenerate with streaming
+const newStream = session.regenerateLast({ stream: true })
+
+for await (const chunk of newStream) {
+  console.log(chunk)
+}
+
+// Regenerate without streaming
+const newResponse = await session.regenerateLast({ stream: false })
+console.log(newResponse)
+```
+
+<ParamField path="options.stream" type="boolean" required>
+  Whether to stream the regenerated response.
+</ParamField>
+
+**Throws:** Error if there are no messages or the last message is not from the assistant.
+
+## Interaction State
+
+Each question generates an `Interaction` object that tracks the complete lifecycle:
+
+```typescript
+import type { Interaction } from '@orama/orama'
+
+const interaction: Interaction = {
+  interactionId: 'rand-id-123',      // Unique interaction identifier
+  query: 'What is vector search?',    // The user's query
+  response: 'Vector search is...',    // The AI's response (builds over time)
+  aborted: false,                     // Whether the request was cancelled
+  loading: false,                     // Whether currently generating
+  sources: {...},                     // Search results used as context
+  translatedQuery: {...},             // The actual search params used
+  error: false,                       // Whether an error occurred
+  errorMessage: null                  // Error details if any
+}
+```
+
+Access the full state via `session.state`:
+
+```typescript
+const lastInteraction = session.state[session.state.length - 1]
+
+if (lastInteraction.loading) {
+  console.log('Generating response...')
+}
+
+if (lastInteraction.sources) {
+  console.log(`Found ${lastInteraction.sources.count} relevant documents`)
+  lastInteraction.sources.hits.forEach((hit) => {
+    console.log(`- ${hit.document.title} (score: ${hit.score})`)
+  })
+}
+```
+
+## Advanced Example
+
+Here's a complete example with error handling and reactive UI updates:
+
+```typescript
+import { create } from '@orama/orama'
+import { pluginSecureProxy } from '@orama/plugin-secure-proxy'
+import { AnswerSession } from '@orama/orama'
+import type { Interaction } from '@orama/orama'
+
+// Setup
+const db = await create({
+  schema: {
+    title: 'string',
+    content: 'string',
+    category: 'string'
+  },
+  plugins: [
+    await pluginSecureProxy({
+      apiKey: process.env.ORAMA_API_KEY,
+      models: { chat: 'openai/gpt-4o-mini' }
+    })
+  ]
+})
+
+// Create session with full configuration
+const session = new AnswerSession(db, {
+  conversationID: generateConversationId(),
+  systemPrompt: `You are a documentation assistant.
+    - Answer questions based on the provided context
+    - If information is not in the context, say so
+    - Provide code examples when relevant
+    - Always cite your sources`,
+  userContext: {
+    userType: 'developer',
+    experience: 'intermediate'
+  },
+  events: {
+    onStateChange: (state: Interaction[]) => {
+      const current = state[state.length - 1]
+      
+      // Update UI based on state
+      if (current.loading) {
+        ui.showLoading()
+      } else {
+        ui.hideLoading()
+      }
+      
+      // Stream response to UI
+      if (current.response) {
+        ui.updateMessage(current.interactionId, current.response)
+      }
+      
+      // Display sources
+      if (current.sources && current.sources.hits.length > 0) {
+        ui.showSources(current.sources.hits.map(h => ({
+          title: h.document.title,
+          score: h.score
+        })))
+      }
+      
+      // Handle errors
+      if (current.error) {
+        ui.showError(current.errorMessage || 'An error occurred')
+      }
+    }
+  }
+})
+
+// Ask a question with streaming
+async function askQuestion(query: string) {
+  try {
+    const stream = await session.askStream({
+      term: query,
+      properties: ['title', 'content'],
+      limit: 5,
+      boost: {
+        title: 2  // Prioritize title matches
+      }
+    })
+    
+    for await (const chunk of stream) {
+      // Chunks automatically trigger onStateChange
+      // No need to manually update UI here
+    }
+  } catch (error) {
+    console.error('Failed to get answer:', error)
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use descriptive system prompts">
+    Clear system prompts dramatically improve response quality. Be specific about:
+    - The assistant's role and expertise
+    - Expected response format
+    - Any constraints or guidelines
+    - Examples of good responses
+  </Accordion>
+  
+  <Accordion title="Implement conversation persistence">
+    Store `conversationID` and messages to enable:
+    - Cross-session conversation continuity
+    - Conversation history features
+    - Analytics and debugging
+  </Accordion>
+  
+  <Accordion title="Handle errors gracefully">
+    Monitor the `error` and `errorMessage` fields in interactions and provide helpful feedback to users.
+  </Accordion>
+  
+  <Accordion title="Leverage user context">
+    Pass relevant user information to personalize responses and improve relevance.
+  </Accordion>
+  
+  <Accordion title="Use streaming for better UX">
+    Prefer `askStream()` over `ask()` in user-facing applications to show progress and reduce perceived latency.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Build Chat UI" icon="messages" href="/answer-engine/chat">
+    Learn how to create interactive chat experiences
+  </Card>
+  <Card title="Search Parameters" icon="magnifying-glass" href="/searching/introduction">
+    Explore all available search options for better context retrieval
+  </Card>
+</CardGroup>

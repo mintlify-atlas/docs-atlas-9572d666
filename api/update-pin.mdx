@@ -1,0 +1,230 @@
+---
+title: updatePin()
+description: Update an existing pinning rule in the database
+---
+
+Update an existing pinning rule in the database. The rule must already exist, otherwise an error will be thrown.
+
+## Signature
+
+```typescript
+function updatePin<T extends AnyOrama>(
+  orama: T,
+  rule: PinRule
+): void
+```
+
+## Parameters
+
+<ParamField path="orama" type="AnyOrama" required>
+  The Orama database instance.
+</ParamField>
+
+<ParamField path="rule" type="PinRule" required>
+  The updated pinning rule. Must have the same `id` as the existing rule.
+  
+  <ParamField path="id" type="string" required>
+    The ID of the existing rule to update.
+  </ParamField>
+  
+  <ParamField path="conditions" type="PinCondition[]" required>
+    Updated array of conditions:
+    - `anchoring`: `'is'` | `'starts_with'` | `'contains'`
+    - `pattern`: Pattern to match against search term
+  </ParamField>
+  
+  <ParamField path="consequence" type="object" required>
+    Updated actions to take.
+    
+    <ParamField path="promote" type="PinPromotion[]" required>
+      Updated array of documents to promote:
+      - `doc_id`: Document ID
+      - `position`: Target position (0-based)
+    </ParamField>
+  </ParamField>
+</ParamField>
+
+## Returns
+
+<ResponseField name="void" type="void">
+  This function returns nothing. Throws an error if the rule doesn't exist.
+</ResponseField>
+
+## Examples
+
+### Update Pin Position
+
+```typescript
+import { create, insertPin, updatePin } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string'
+  }
+})
+
+// Insert initial rule
+insertPin(db, {
+  id: 'featured-products',
+  conditions: [
+    { anchoring: 'contains', pattern: 'featured' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: '2', position: 0 }
+    ]
+  }
+})
+
+// Update to pin a different document
+updatePin(db, {
+  id: 'featured-products',
+  conditions: [
+    { anchoring: 'contains', pattern: 'featured' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: '3', position: 0 } // Changed from doc_id '2' to '3'
+    ]
+  }
+})
+```
+
+### Update Conditions
+
+```typescript
+// Change from exact match to partial match
+updatePin(db, {
+  id: 'best-sellers',
+  conditions: [
+    { anchoring: 'contains', pattern: 'best' } // Changed from 'is' to 'contains'
+  ],
+  consequence: {
+    promote: [
+      { doc_id: '10', position: 0 }
+    ]
+  }
+})
+```
+
+### Add More Promoted Documents
+
+```typescript
+// Start with one promoted document
+insertPin(db, {
+  id: 'holiday-promo',
+  conditions: [
+    { anchoring: 'contains', pattern: 'holiday' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: 'h1', position: 0 }
+    ]
+  }
+})
+
+// Update to promote three documents
+updatePin(db, {
+  id: 'holiday-promo',
+  conditions: [
+    { anchoring: 'contains', pattern: 'holiday' }
+  ],
+  consequence: {
+    promote: [
+      { doc_id: 'h1', position: 0 },
+      { doc_id: 'h2', position: 1 },
+      { doc_id: 'h3', position: 2 }
+    ]
+  }
+})
+```
+
+### Update Multiple Conditions
+
+```typescript
+// Change condition logic
+updatePin(db, {
+  id: 'premium-sale',
+  conditions: [
+    { anchoring: 'contains', pattern: 'premium' },
+    { anchoring: 'contains', pattern: 'discount' } // Changed from 'sale' to 'discount'
+  ],
+  consequence: {
+    promote: [
+      { doc_id: '5', position: 0 }
+    ]
+  }
+})
+```
+
+### Change Pattern Text
+
+```typescript
+// Update the search pattern
+updatePin(db, {
+  id: 'new-arrivals',
+  conditions: [
+    { anchoring: 'starts_with', pattern: 'latest' } // Changed from 'new' to 'latest'
+  ],
+  consequence: {
+    promote: [
+      { doc_id: '20', position: 0 }
+    ]
+  }
+})
+```
+
+## Error Handling
+
+```typescript
+try {
+  // Attempt to update non-existent rule
+  updatePin(db, {
+    id: 'non-existent-rule',
+    conditions: [{ anchoring: 'contains', pattern: 'test' }],
+    consequence: { promote: [{ doc_id: '1', position: 0 }] }
+  })
+} catch (error) {
+  console.error(error.message)
+  // "PINNING_RULE_NOT_FOUND: Cannot update pinning rule with id 'non-existent-rule'
+  // because it does not exist. Use addRule to create it."
+}
+```
+
+### Safe Update Pattern
+
+```typescript
+import { getPin, updatePin, insertPin } from '@orama/orama'
+
+const ruleId = 'my-rule'
+const newRule = {
+  id: ruleId,
+  conditions: [{ anchoring: 'contains', pattern: 'updated' }],
+  consequence: { promote: [{ doc_id: '1', position: 0 }] }
+}
+
+// Check if rule exists before updating
+const existing = getPin(db, ruleId)
+if (existing) {
+  updatePin(db, newRule)
+} else {
+  insertPin(db, newRule)
+}
+```
+
+## Notes
+
+- The rule ID cannot be changed - it's used to identify which rule to update
+- If you need to change the ID, delete the old rule and insert a new one
+- The entire rule is replaced - you must provide all fields, not just changed ones
+- Updates are applied immediately and affect subsequent searches
+- Use `getPin()` to retrieve the current rule before updating if you only want to change specific fields
+
+## Related
+
+- [insertPin()](/api/insert-pin)
+- [deletePin()](/api/delete-pin)
+- [getPin()](/api/get-pin)
+- [getAllPins()](/api/get-all-pins)
+- [Pinning Guide](/search/pinning)

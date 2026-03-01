@@ -1,0 +1,438 @@
+---
+title: Documents
+description: Understanding document structure, indexing, and ID management in Orama
+---
+
+Documents are the individual records stored and indexed in your Orama database. Each document must conform to the schema and can optionally include an ID.
+
+## Document Structure
+
+Documents are JavaScript objects that match your schema definition:
+
+```typescript
+import { create, insert } from '@orama/orama'
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    price: 'number',
+    inStock: 'boolean'
+  }
+})
+
+const doc = {
+  title: 'Wireless Headphones',
+  description: 'High-quality Bluetooth headphones with noise cancellation',
+  price: 129.99,
+  inStock: true
+}
+
+await insert(db, doc)
+```
+
+## Document IDs
+
+Every document in Orama has a unique identifier.
+
+### Auto-Generated IDs
+
+If you don't provide an ID, Orama automatically generates one:
+
+```typescript
+const docId = await insert(db, {
+  title: 'Product A',
+  price: 49.99
+})
+
+console.log(docId) // e.g., "1-6789"
+```
+
+### Custom IDs
+
+You can provide your own ID by including an `id` field:
+
+```typescript
+await insert(db, {
+  id: 'prod-12345',
+  title: 'Product A',
+  price: 49.99
+})
+```
+
+<Warning>
+  Document IDs must be strings. Using other types will throw an error.
+</Warning>
+
+### ID Requirements
+
+From `components/defaults.ts:25-35`:
+
+```typescript
+function getDocumentIndexId(doc: AnyDocument): string {
+  if (doc.id) {
+    if (typeof doc.id !== 'string') {
+      throw createError('DOCUMENT_ID_MUST_BE_STRING', typeof doc.id)
+    }
+    return doc.id
+  }
+  return uniqueId()
+}
+```
+
+## Inserting Documents
+
+### Single Insert
+
+Insert one document at a time:
+
+```typescript
+import { insert } from '@orama/orama'
+
+const id = await insert(db, {
+  title: 'Laptop',
+  price: 999.99,
+  inStock: true
+})
+
+console.log('Inserted document:', id)
+```
+
+### Bulk Insert
+
+Insert multiple documents efficiently:
+
+```typescript
+import { insertMultiple } from '@orama/orama'
+
+const docs = [
+  { title: 'Product 1', price: 10 },
+  { title: 'Product 2', price: 20 },
+  { title: 'Product 3', price: 30 }
+]
+
+const ids = await insertMultiple(db, docs)
+console.log('Inserted IDs:', ids) // ['id1', 'id2', 'id3']
+```
+
+<Note>
+  `insertMultiple` is optimized for bulk operations and is significantly faster than multiple `insert` calls.
+</Note>
+
+## Updating Documents
+
+### Update by ID
+
+Update an existing document:
+
+```typescript
+import { update } from '@orama/orama'
+
+await update(db, 'prod-12345', {
+  title: 'Updated Product Name',
+  price: 59.99
+})
+```
+
+<Warning>
+  Updates replace the entire document. Include all fields you want to keep.
+</Warning>
+
+### Partial Updates
+
+To update only specific fields, retrieve the document first:
+
+```typescript
+import { search, update } from '@orama/orama'
+
+// Get the current document
+const result = await search(db, {
+  term: '',
+  where: { id: 'prod-12345' }
+})
+
+const currentDoc = result.hits[0].document
+
+// Update only the price
+await update(db, 'prod-12345', {
+  ...currentDoc,
+  price: 59.99
+})
+```
+
+## Removing Documents
+
+### Remove by ID
+
+Remove a single document:
+
+```typescript
+import { remove } from '@orama/orama'
+
+await remove(db, 'prod-12345')
+```
+
+### Bulk Remove
+
+Remove multiple documents:
+
+```typescript
+import { removeMultiple } from '@orama/orama'
+
+const idsToRemove = ['id1', 'id2', 'id3']
+await removeMultiple(db, idsToRemove)
+```
+
+## Document Storage
+
+Orama uses an internal document store to manage documents efficiently.
+
+From `components/documents-store.ts:10-14`:
+
+```typescript
+interface DocumentsStore {
+  sharedInternalDocumentStore: InternalDocumentIDStore
+  docs: Record<InternalDocumentID, AnyDocument>
+  count: number
+}
+```
+
+### Internal vs External IDs
+
+Orama maintains two ID systems:
+
+1. **External ID** - The string ID you see (custom or auto-generated)
+2. **Internal ID** - Numeric ID used internally for performance
+
+```typescript
+// External ID: "prod-12345"
+// Internal ID: 42 (numeric, used in indexes)
+```
+
+This dual system provides:
+- Human-readable external IDs
+- Fast numeric lookups internally
+- Efficient memory usage
+
+## Retrieving Documents
+
+### By ID
+
+Get a single document by its ID:
+
+```typescript
+import { getByID } from '@orama/orama'
+
+const doc = await getByID(db, 'prod-12345')
+console.log(doc)
+// { id: 'prod-12345', title: 'Product', price: 49.99, ... }
+```
+
+### By Search
+
+Retrieve documents through search:
+
+```typescript
+import { search } from '@orama/orama'
+
+const results = await search(db, {
+  term: 'headphones',
+  limit: 10
+})
+
+for (const hit of results.hits) {
+  console.log(hit.id, hit.document)
+}
+```
+
+### Count Documents
+
+Get the total number of documents:
+
+```typescript
+import { count } from '@orama/orama'
+
+const total = await count(db)
+console.log('Total documents:', total)
+```
+
+## Document Indexing
+
+When you insert a document, Orama indexes it across multiple data structures:
+
+### Text Indexing (Radix Trees)
+
+String fields are tokenized and indexed for full-text search:
+
+```typescript
+// Document
+{ title: "Wireless Bluetooth Headphones" }
+
+// Tokenized into
+["wireless", "bluetooth", "headphones"]
+
+// Each token indexed in Radix tree for fast lookup
+```
+
+### Numeric Indexing (AVL Trees)
+
+Number fields are indexed in balanced AVL trees:
+
+```typescript
+// Enables efficient range queries
+where: { price: { gte: 50, lte: 100 } }
+```
+
+### Boolean Indexing (Bool Nodes)
+
+Boolean fields are indexed separately:
+
+```typescript
+// Fast filtering
+where: { inStock: true }
+```
+
+### Enum Indexing (Flat Trees)
+
+Enum fields use flat tree structures:
+
+```typescript
+// Exact match filtering
+where: { category: { eq: 'electronics' } }
+```
+
+### Vector Indexing
+
+Vector fields are indexed for similarity search:
+
+```typescript
+schema: {
+  embedding: 'vector[384]'
+}
+
+// Enables semantic search
+mode: 'vector',
+vector: {
+  value: embeddingArray,
+  property: 'embedding'
+}
+```
+
+## Document Hooks
+
+Orama provides hooks to execute code during document operations:
+
+### Insert Hooks
+
+```typescript
+const db = await create({
+  schema: { /* ... */ },
+  components: {
+    beforeInsert: async (db, id, doc) => {
+      console.log('About to insert:', id)
+      // Validate, transform, or log
+    },
+    afterInsert: async (db, id, doc) => {
+      console.log('Inserted:', id)
+      // Update external systems, cache, etc.
+    }
+  }
+})
+```
+
+### Update Hooks
+
+```typescript
+components: {
+  beforeUpdate: async (db, id, doc) => {
+    // Pre-update logic
+  },
+  afterUpdate: async (db, id, doc) => {
+    // Post-update logic
+  }
+}
+```
+
+### Remove Hooks
+
+```typescript
+components: {
+  beforeRemove: async (db, id, doc) => {
+    // Pre-remove logic
+  },
+  afterRemove: async (db, id, doc) => {
+    // Post-remove logic
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use meaningful IDs">
+    When providing custom IDs, use meaningful identifiers that relate to your domain:
+    ```typescript
+    id: 'user-john-doe-123'
+    id: 'product-electronics-45678'
+    id: 'order-2024-001'
+    ```
+  </Accordion>
+
+  <Accordion title="Batch operations for bulk data">
+    Always use `insertMultiple` and `removeMultiple` for bulk operations:
+    ```typescript
+    // ✓ Good
+    await insertMultiple(db, docs)
+    
+    // ✗ Bad (slow)
+    for (const doc of docs) {
+      await insert(db, doc)
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Include all fields in updates">
+    Remember that `update` replaces the entire document:
+    ```typescript
+    // ✓ Good - includes all fields
+    await update(db, id, {
+      ...currentDoc,
+      price: 59.99
+    })
+    
+    // ✗ Bad - loses other fields
+    await update(db, id, {
+      price: 59.99
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="Handle missing fields gracefully">
+    Optional fields are supported. Documents can omit fields:
+    ```typescript
+    schema: {
+      title: 'string',
+      description: 'string',
+      price: 'number'
+    }
+    
+    // Valid - description is optional
+    await insert(db, {
+      title: 'Product',
+      price: 29.99
+      // description omitted
+    })
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Search" icon="magnifying-glass" href="/open-source/usage/search/introduction">
+    Learn how to search your documents
+  </Card>
+  <Card title="Filters" icon="filter" href="/open-source/usage/search/filters">
+    Filter documents with where clauses
+  </Card>
+</CardGroup>

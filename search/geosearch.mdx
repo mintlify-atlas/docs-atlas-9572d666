@@ -1,0 +1,433 @@
+---
+title: Geosearch
+description: Perform location-based searches with radius and polygon filtering
+---
+
+# Geosearch
+
+Orama supports geospatial search capabilities, allowing you to filter results based on geographic locations using radius and polygon-based queries.
+
+## Geopoint Schema
+
+Define geopoint properties in your schema:
+
+```javascript
+import { create, insert, search } from '@orama/orama'
+
+const db = create({
+  schema: {
+    name: 'string',
+    location: 'geopoint'
+  }
+})
+
+insert(db, {
+  name: 'Central Park',
+  location: {
+    lat: 40.785091,
+    lon: -73.968285
+  }
+})
+```
+
+<ParamField path="lat" type="number" required>
+  Latitude coordinate (-90 to 90)
+</ParamField>
+
+<ParamField path="lon" type="number" required>
+  Longitude coordinate (-180 to 180)
+</ParamField>
+
+## Radius Search
+
+Search for documents within a specific radius from a center point:
+
+```javascript
+const results = search(db, {
+  where: {
+    location: {
+      radius: {
+        coordinates: {
+          lat: 40.7128,
+          lon: -74.0060
+        },
+        value: 5,
+        unit: 'km'
+      }
+    }
+  }
+})
+```
+
+### Radius Parameters
+
+<ParamField path="radius.coordinates" type="{lat: number, lon: number}" required>
+  The center point of the search radius
+</ParamField>
+
+<ParamField path="radius.value" type="number" required>
+  The radius distance from the center point
+</ParamField>
+
+<ParamField path="radius.unit" type="GeosearchDistanceUnit" default="'m'">
+  The unit of measurement for the radius. Options: `'cm'`, `'m'`, `'km'`, `'ft'`, `'yd'`, `'mi'`
+</ParamField>
+
+<ParamField path="radius.inside" type="boolean" default="true">
+  If `true`, returns documents inside the radius. If `false`, returns documents outside the radius.
+</ParamField>
+
+<ParamField path="radius.highPrecision" type="boolean" default="false">
+  Enable high-precision distance calculations (slower but more accurate)
+</ParamField>
+
+## Distance Units
+
+Orama supports various distance units:
+
+<CodeGroup>
+```javascript Kilometers
+const results = search(db, {
+  where: {
+    location: {
+      radius: {
+        coordinates: { lat: 40.7128, lon: -74.0060 },
+        value: 5,
+        unit: 'km'
+      }
+    }
+  }
+})
+```
+
+```javascript Miles
+const results = search(db, {
+  where: {
+    location: {
+      radius: {
+        coordinates: { lat: 40.7128, lon: -74.0060 },
+        value: 3,
+        unit: 'mi'
+      }
+    }
+  }
+})
+```
+
+```javascript Meters
+const results = search(db, {
+  where: {
+    location: {
+      radius: {
+        coordinates: { lat: 40.7128, lon: -74.0060 },
+        value: 1000,
+        unit: 'm'
+      }
+    }
+  }
+})
+```
+
+```javascript Feet
+const results = search(db, {
+  where: {
+    location: {
+      radius: {
+        coordinates: { lat: 40.7128, lon: -74.0060 },
+        value: 5280,
+        unit: 'ft'
+      }
+    }
+  }
+})
+```
+</CodeGroup>
+
+## Polygon Search
+
+Search for documents within a polygon defined by multiple coordinates:
+
+```javascript
+const results = search(db, {
+  where: {
+    location: {
+      polygon: {
+        coordinates: [
+          { lat: 40.7128, lon: -74.0060 },  // Point 1
+          { lat: 40.7580, lon: -73.9855 },  // Point 2
+          { lat: 40.7489, lon: -73.9680 },  // Point 3
+          { lat: 40.7128, lon: -74.0060 }   // Close the polygon
+        ]
+      }
+    }
+  }
+})
+```
+
+<Note>
+The polygon must be closed - the first and last coordinates should be the same point.
+</Note>
+
+### Polygon Parameters
+
+<ParamField path="polygon.coordinates" type="Array<{lat: number, lon: number}>" required>
+  Array of coordinate points defining the polygon vertices. First and last points should match to close the polygon.
+</ParamField>
+
+<ParamField path="polygon.inside" type="boolean" default="true">
+  If `true`, returns documents inside the polygon. If `false`, returns documents outside the polygon.
+</ParamField>
+
+<ParamField path="polygon.highPrecision" type="boolean" default="false">
+  Enable high-precision polygon calculations
+</ParamField>
+
+## Outside Radius/Polygon
+
+Find documents outside a specific area:
+
+<CodeGroup>
+```javascript Outside Radius
+const results = search(db, {
+  where: {
+    location: {
+      radius: {
+        coordinates: { lat: 40.7128, lon: -74.0060 },
+        value: 10,
+        unit: 'km',
+        inside: false  // Documents OUTSIDE the radius
+      }
+    }
+  }
+})
+```
+
+```javascript Outside Polygon
+const results = search(db, {
+  where: {
+    location: {
+      polygon: {
+        coordinates: [
+          { lat: 40.7128, lon: -74.0060 },
+          { lat: 40.7580, lon: -73.9855 },
+          { lat: 40.7489, lon: -73.9680 },
+          { lat: 40.7128, lon: -74.0060 }
+        ],
+        inside: false  // Documents OUTSIDE the polygon
+      }
+    }
+  }
+})
+```
+</CodeGroup>
+
+## High Precision Mode
+
+Enable high-precision calculations for more accurate results:
+
+```javascript
+const results = search(db, {
+  where: {
+    location: {
+      radius: {
+        coordinates: { lat: 40.7128, lon: -74.0060 },
+        value: 5,
+        unit: 'km',
+        highPrecision: true  // More accurate distance calculations
+      }
+    }
+  }
+})
+```
+
+<Warning>
+High precision mode provides more accurate results but is slower. Use it only when precision is critical.
+</Warning>
+
+## Combining with Text Search
+
+Combine geosearch with full-text search:
+
+```javascript
+const results = search(db, {
+  term: 'coffee shop',
+  where: {
+    location: {
+      radius: {
+        coordinates: { lat: 40.7128, lon: -74.0060 },
+        value: 2,
+        unit: 'km'
+      }
+    }
+  }
+})
+```
+
+## Geosearch with Other Filters
+
+Combine geosearch with other filter types:
+
+```javascript
+const db = create({
+  schema: {
+    name: 'string',
+    category: 'string',
+    rating: 'number',
+    location: 'geopoint'
+  }
+})
+
+const results = search(db, {
+  term: 'restaurant',
+  where: {
+    and: [
+      {
+        location: {
+          radius: {
+            coordinates: { lat: 40.7128, lon: -74.0060 },
+            value: 5,
+            unit: 'km'
+          }
+        }
+      },
+      {
+        rating: {
+          gte: 4.0
+        }
+      },
+      {
+        category: 'italian'
+      }
+    ]
+  }
+})
+```
+
+## Distance Scoring
+
+When performing geosearch-only queries (no search term), results are scored by distance:
+
+```javascript
+// Geosearch-only query - results scored by distance
+const results = search(db, {
+  where: {
+    location: {
+      radius: {
+        coordinates: { lat: 40.7128, lon: -74.0060 },
+        value: 10,
+        unit: 'km'
+      }
+    }
+  }
+})
+
+// Results are sorted by proximity to the center point
+console.log(results.hits)
+// Closest location will have the highest score
+```
+
+<Info>
+Geosearch-only queries automatically score results by distance from the center point, with closer locations receiving higher scores.
+</Info>
+
+## Multiple Geopoint Properties
+
+You can have multiple geopoint properties in your schema:
+
+```javascript
+const db = create({
+  schema: {
+    name: 'string',
+    pickupLocation: 'geopoint',
+    deliveryLocation: 'geopoint'
+  }
+})
+
+insert(db, {
+  name: 'Delivery Order #123',
+  pickupLocation: { lat: 40.7128, lon: -74.0060 },
+  deliveryLocation: { lat: 40.7580, lon: -73.9855 }
+})
+
+// Search by pickup location
+const results = search(db, {
+  where: {
+    pickupLocation: {
+      radius: {
+        coordinates: { lat: 40.7128, lon: -74.0060 },
+        value: 1,
+        unit: 'km'
+      }
+    }
+  }
+})
+```
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Store Locator" icon="store">
+    Find nearby stores, restaurants, or businesses within a radius
+  </Card>
+  <Card title="Delivery Zones" icon="truck">
+    Check if addresses fall within delivery polygons
+  </Card>
+  <Card title="Real Estate Search" icon="house">
+    Find properties near specific landmarks or within neighborhoods
+  </Card>
+  <Card title="Event Discovery" icon="calendar">
+    Discover events happening nearby
+  </Card>
+</CardGroup>
+
+## Performance Considerations
+
+<Steps>
+  <Step title="Use Appropriate Radius">
+    Smaller radius queries are faster:
+    ```javascript
+    // Faster
+    { radius: { value: 5, unit: 'km' } }
+    
+    // Slower
+    { radius: { value: 100, unit: 'km' } }
+    ```
+  </Step>
+  
+  <Step title="Avoid High Precision When Not Needed">
+    Standard precision is sufficient for most use cases and much faster
+  </Step>
+  
+  <Step title="Limit Polygon Complexity">
+    Simple polygons (3-6 vertices) perform better than complex ones
+  </Step>
+  
+  <Step title="Combine with Other Filters">
+    Pre-filter by other criteria before applying geosearch:
+    ```javascript
+    where: {
+      and: [
+        { category: 'restaurant' },  // Filter first
+        { location: { radius: {...} } }  // Then geosearch
+      ]
+    }
+    ```
+  </Step>
+</Steps>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Filters" icon="filter" href="/search/filters">
+    Combine geosearch with other filter types
+  </Card>
+  <Card title="Sorting" icon="arrow-down-wide-short" href="/search/sorting">
+    Sort geosearch results by distance or other properties
+  </Card>
+  <Card title="Full-Text Search" icon="text" href="/search/full-text-search">
+    Combine geosearch with text search
+  </Card>
+  <Card title="Facets" icon="list" href="/search/facets">
+    Generate location-based facets
+  </Card>
+</CardGroup>

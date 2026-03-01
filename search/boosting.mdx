@@ -1,0 +1,429 @@
+---
+title: Boosting
+description: Give more importance to specific fields in search results
+---
+
+# Field Boosting
+
+Boosting allows you to give more weight to specific properties during search, influencing the relevance score of documents. This is useful when certain fields are more important than others for your search use case.
+
+## Basic Boosting
+
+Use the `boost` parameter to multiply the score of specific properties:
+
+```javascript
+import { create, insert, search } from '@orama/orama'
+
+const db = create({
+  schema: {
+    title: 'string',
+    author: 'string',
+    description: 'string'
+  }
+})
+
+insert(db, {
+  title: 'Introduction to Orama',
+  author: 'Michael',
+  description: 'Learn about Orama search engine'
+})
+
+const results = search(db, {
+  term: 'Michael',
+  properties: ['title', 'author', 'description'],
+  boost: {
+    title: 2  // Title matches are 2x more important
+  }
+})
+```
+
+## How Boosting Works
+
+When you boost a property, Orama multiplies the BM25 score for that property by the boost value:
+
+<Steps>
+  <Step title="Calculate Base Score">
+    Orama calculates the BM25 score for each property where the term appears
+  </Step>
+  
+  <Step title="Apply Boost Multiplier">
+    The score for boosted properties is multiplied by the boost value
+  </Step>
+  
+  <Step title="Combine Scores">
+    All property scores are combined to create the final document score
+  </Step>
+  
+  <Step title="Rank Results">
+    Documents are ranked by their final combined score
+  </Step>
+</Steps>
+
+## Boost Values
+
+Boost values are numeric multipliers:
+
+<CodeGroup>
+```javascript Higher Importance (2x)
+const results = search(db, {
+  term: 'headphones',
+  boost: {
+    title: 2  // Title matches count twice as much
+  }
+})
+```
+
+```javascript Much Higher Importance (5x)
+const results = search(db, {
+  term: 'headphones',
+  boost: {
+    title: 5  // Title matches count 5x more
+  }
+})
+```
+
+```javascript Lower Importance (0.5x)
+const results = search(db, {
+  term: 'headphones',
+  boost: {
+    description: 0.5  // Description matches count half as much
+  }
+})
+```
+</CodeGroup>
+
+<Info>
+- Values greater than 1 increase importance
+- Values between 0 and 1 decrease importance
+- Value of 1 has no effect (default)
+- Negative values are not allowed
+</Info>
+
+## Multiple Field Boosting
+
+Boost multiple properties with different values:
+
+```javascript
+const results = search(db, {
+  term: 'JavaScript tutorials',
+  properties: ['title', 'description', 'tags', 'author'],
+  boost: {
+    title: 3,        // Titles are most important
+    tags: 2,         // Tags are moderately important
+    description: 1,  // Description has normal weight
+    author: 0.5      // Author is least important
+  }
+})
+```
+
+## Nested Property Boosting
+
+Boost nested object properties:
+
+```javascript
+const db = create({
+  schema: {
+    title: 'string',
+    content: {
+      heading: 'string',
+      body: 'string',
+      footer: 'string'
+    }
+  }
+})
+
+const results = search(db, {
+  term: 'search',
+  boost: {
+    title: 3,
+    'content.heading': 2,
+    'content.body': 1,
+    'content.footer': 0.5
+  }
+})
+```
+
+## Practical Examples
+
+### E-commerce Product Search
+
+Prioritize product names over descriptions:
+
+```javascript
+const db = create({
+  schema: {
+    name: 'string',
+    brand: 'string',
+    description: 'string',
+    category: 'string'
+  }
+})
+
+const results = search(db, {
+  term: 'wireless headphones',
+  boost: {
+    name: 3,         // Product name is most important
+    brand: 2,        // Brand is important
+    category: 1.5,   // Category is moderately important
+    description: 1   // Description has normal weight
+  }
+})
+```
+
+### Documentation Search
+
+Prioritize titles and headings:
+
+```javascript
+const db = create({
+  schema: {
+    title: 'string',
+    subtitle: 'string',
+    content: 'string',
+    tags: 'string[]'
+  }
+})
+
+const results = search(db, {
+  term: 'authentication',
+  boost: {
+    title: 5,      // Titles are highly important
+    subtitle: 3,   // Subtitles are important
+    tags: 2,       // Tags are moderately important
+    content: 1     // Content has normal weight
+  }
+})
+```
+
+### Blog Post Search
+
+Balance title, author, and content:
+
+```javascript
+const db = create({
+  schema: {
+    title: 'string',
+    author: 'string',
+    excerpt: 'string',
+    body: 'string',
+    tags: 'string[]'
+  }
+})
+
+const results = search(db, {
+  term: 'machine learning',
+  boost: {
+    title: 4,     // Titles most important
+    tags: 2.5,    // Tags very important
+    excerpt: 1.5, // Excerpts moderately important
+    author: 1,    // Author normal weight
+    body: 0.8     // Body slightly less important
+  }
+})
+```
+
+## Combining Boosting with Other Features
+
+### With Property Filtering
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  properties: ['title', 'description'],  // Only search these fields
+  boost: {
+    title: 2  // Boost only applies to searched properties
+  }
+})
+```
+
+<Warning>
+Boost values are only applied to properties included in the `properties` array. Boosting a property not in the search will have no effect.
+</Warning>
+
+### With Filters
+
+```javascript
+const results = search(db, {
+  term: 'laptop',
+  boost: {
+    title: 3,
+    brand: 2
+  },
+  where: {
+    price: {
+      lt: 1000
+    },
+    inStock: true
+  }
+})
+```
+
+### With BM25 Tuning
+
+```javascript
+const results = search(db, {
+  term: 'headphones',
+  boost: {
+    title: 2
+  },
+  relevance: {
+    k: 1.2,   // BM25 term frequency saturation
+    b: 0.75,  // BM25 document length normalization
+    d: 0.5    // BM25 frequency normalization
+  }
+})
+```
+
+### With Exact Matching
+
+```javascript
+const results = search(db, {
+  term: 'Noise Cancelling Headphones',
+  exact: true,  // Exact phrase matching
+  boost: {
+    title: 3  // Boost still applies to exact matches
+  }
+})
+```
+
+## Boosting in Hybrid Search
+
+Boosting only affects the full-text search component of hybrid search:
+
+```javascript
+const results = search(db, {
+  mode: 'hybrid',
+  term: 'headphones',
+  vector: {
+    value: embeddings,
+    property: 'embedding'
+  },
+  boost: {
+    title: 2  // Only affects full-text search, not vector search
+  },
+  hybridWeights: {
+    text: 0.7,    // Weight for full-text results (with boosting)
+    vector: 0.3   // Weight for vector results (no boosting)
+  }
+})
+```
+
+<Note>
+Boost parameters only apply to the full-text search portion of hybrid search. Vector search results are not affected by field boosting.
+</Note>
+
+## Dynamic Boosting
+
+Adjust boost values based on user context or preferences:
+
+```javascript
+function searchProducts(term, userPreferences) {
+  const boost = {
+    name: 2,
+    description: 1
+  }
+  
+  // Increase brand boost if user is brand-conscious
+  if (userPreferences.preferBrands) {
+    boost.brand = 3
+  }
+  
+  // Increase category boost if searching within category
+  if (userPreferences.categoryFocus) {
+    boost.category = 2.5
+  }
+  
+  return search(db, {
+    term,
+    boost
+  })
+}
+```
+
+## Testing Boost Values
+
+Experiment with different boost values to find the optimal configuration:
+
+```javascript
+// Test different configurations
+const configs = [
+  { title: 2, description: 1 },
+  { title: 3, description: 1 },
+  { title: 5, description: 1 },
+  { title: 3, description: 0.5 }
+]
+
+configs.forEach((boost, i) => {
+  const results = search(db, {
+    term: 'test query',
+    boost,
+    limit: 10
+  })
+  
+  console.log(`Config ${i + 1}:`, results.hits[0]?.score)
+})
+```
+
+## Performance Considerations
+
+<Steps>
+  <Step title="Boosting is Efficient">
+    Boosting is a simple multiplication operation and has minimal performance impact
+  </Step>
+  
+  <Step title="Limit Boosted Properties">
+    While you can boost many properties, focus on the most important ones:
+    ```javascript
+    // Good - focused boosting
+    boost: { title: 3, subtitle: 2 }
+    
+    // Less optimal - many boosted properties
+    boost: { field1: 2, field2: 1.5, field3: 1.3, field4: 1.1 }
+    ```
+  </Step>
+  
+  <Step title="Combine with Property Filtering">
+    Search only necessary properties to improve performance:
+    ```javascript
+    search(db, {
+      term: 'query',
+      properties: ['title', 'description'],  // Limit search scope
+      boost: { title: 2 }
+    })
+    ```
+  </Step>
+</Steps>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Start with 2-3x" icon="gauge">
+    Begin with moderate boost values (2-3x) and adjust based on results
+  </Card>
+  <Card title="Use Consistently" icon="arrows-repeat">
+    Apply similar boosting strategies across similar search types
+  </Card>
+  <Card title="Test with Real Queries" icon="flask">
+    Validate boost values with actual user search queries
+  </Card>
+  <Card title="Document Choices" icon="file-lines">
+    Document why certain fields are boosted for future reference
+  </Card>
+</CardGroup>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Full-Text Search" icon="text" href="/search/full-text-search">
+    Learn about full-text search fundamentals
+  </Card>
+  <Card title="Hybrid Search" icon="shuffle" href="/search/hybrid-search">
+    Combine boosting with hybrid search
+  </Card>
+  <Card title="Sorting" icon="arrow-down-wide-short" href="/search/sorting">
+    Sort boosted search results
+  </Card>
+  <Card title="Filters" icon="filter" href="/search/filters">
+    Combine boosting with filters
+  </Card>
+</CardGroup>

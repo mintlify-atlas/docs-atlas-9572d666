@@ -1,0 +1,416 @@
+---
+title: Results Types
+description: Type definitions for Orama search results
+---
+
+## Overview
+
+Orama returns different result types depending on the search mode. All results include metadata like elapsed time, hit count, and optional facets or groups.
+
+## Results
+
+Standard search results for full-text and vector search.
+
+```typescript
+type Results<Document> = {
+  count: number
+  hits: Result<Document>[]
+  elapsed: ElapsedTime
+  facets?: FacetResult
+  groups?: GroupResult<Document>
+}
+```
+
+<ResponseField name="count" type="number">
+  Total number of matched documents.
+</ResponseField>
+
+<ResponseField name="hits" type="Result<Document>[]">
+  Array of search results with scores and documents.
+</ResponseField>
+
+<ResponseField name="elapsed" type="ElapsedTime">
+  Time taken to execute the search.
+  
+  <Expandable title="ElapsedTime properties">
+    <ResponseField name="raw" type="number">
+      Elapsed time in nanoseconds.
+    </ResponseField>
+    
+    <ResponseField name="formatted" type="string">
+      Human-readable formatted time (e.g., "2ms", "150μs").
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="facets" type="FacetResult" optional>
+  Facet aggregations if requested.
+</ResponseField>
+
+<ResponseField name="groups" type="GroupResult<Document>" optional>
+  Grouped results if requested.
+</ResponseField>
+
+### Example
+
+```typescript
+import { search } from '@orama/orama';
+
+const results = await search(db, {
+  term: 'laptop',
+  properties: ['title', 'description'],
+  limit: 10
+});
+
+console.log(`Found ${results.count} results in ${results.elapsed.formatted}`);
+
+for (const hit of results.hits) {
+  console.log(`${hit.document.title} (score: ${hit.score})`);
+}
+```
+
+## Result
+
+Single search result containing a document and its relevance score.
+
+```typescript
+type Result<Document> = {
+  id: string
+  score: number
+  document: Document
+}
+```
+
+<ResponseField name="id" type="string">
+  The document's unique identifier.
+</ResponseField>
+
+<ResponseField name="score" type="number">
+  Relevance score (higher is better). For BM25 full-text search, this is the BM25 score. For vector search, this is the similarity score.
+</ResponseField>
+
+<ResponseField name="document" type="Document">
+  The matched document with all its properties.
+</ResponseField>
+
+### Example
+
+```typescript
+const results = await search(db, { term: 'laptop' });
+
+const topResult: Result<TypedDocument<typeof db>> = results.hits[0];
+
+console.log({
+  id: topResult.id,
+  score: topResult.score,
+  title: topResult.document.title,
+  price: topResult.document.price
+});
+```
+
+## Hybrid Results
+
+Special result type for hybrid search that combines full-text and vector results.
+
+### HybridResultsBase
+
+Base hybrid results interface.
+
+```typescript
+interface HybridResultsBase<Document> {
+  count: number
+  hits: Result<Document>[]
+  elapsed: ElapsedTime
+  facets?: FacetResult
+  groups?: GroupResult<Document>
+}
+```
+
+<ResponseField name="count" type="number">
+  Total matched documents combining both vector and full-text results. May include duplicates between modes.
+</ResponseField>
+
+<ResponseField name="hits" type="Result<Document>[]">
+  All matched elements from full-text search.
+</ResponseField>
+
+<ResponseField name="elapsed" type="ElapsedTime">
+  Time taken to execute the search.
+</ResponseField>
+
+<ResponseField name="facets" type="FacetResult" optional>
+  Facets from full-text search only.
+</ResponseField>
+
+<ResponseField name="groups" type="GroupResult<Document>" optional>
+  Groups from full-text search only.
+</ResponseField>
+
+### HybridResultsCombine
+
+Extended hybrid results with separate vector hits.
+
+```typescript
+interface HybridResultsCombine<Document> extends HybridResultsBase<Document> {
+  hitsVector: Result<Document>[]
+}
+```
+
+<ResponseField name="hitsVector" type="Result<Document>[]">
+  All matched elements from vector search.
+</ResponseField>
+
+### Example
+
+```typescript
+const results = await search(db, {
+  mode: 'hybrid',
+  term: 'noise cancelling headphones',
+  vector: {
+    value: embedding,
+    property: 'embedding'
+  },
+  hybridWeights: {
+    text: 0.4,
+    vector: 0.6
+  }
+});
+
+console.log(`Full-text results: ${results.hits.length}`);
+console.log(`Vector results: ${results.hitsVector.length}`);
+console.log(`Total count: ${results.count}`);
+```
+
+## Facet Results
+
+### FacetResult
+
+Facet aggregations grouped by property.
+
+```typescript
+type FacetResult = Record<string, {
+  count: number
+  values: Record<string, number>
+}>
+```
+
+<ResponseField name="[property]" type="object">
+  Facet results for each requested property.
+  
+  <Expandable title="Facet object properties">
+    <ResponseField name="count" type="number">
+      Total number of facet values.
+    </ResponseField>
+    
+    <ResponseField name="values" type="Record<string, number>">
+      Map of facet values to their occurrence counts.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```typescript
+const results = await search(db, {
+  term: 'laptop',
+  facets: {
+    brand: { limit: 10, sort: 'DESC' },
+    category: { limit: 5 }
+  }
+});
+
+if (results.facets) {
+  console.log('Brand facets:');
+  for (const [brand, count] of Object.entries(results.facets.brand.values)) {
+    console.log(`  ${brand}: ${count}`);
+  }
+  // Output:
+  //   Dell: 45
+  //   HP: 38
+  //   Lenovo: 32
+  //   ...
+}
+```
+
+## Group Results
+
+### GroupResult
+
+Grouped search results.
+
+```typescript
+type GroupResult<Document> = {
+  values: ScalarSearchableValue[]
+  result: Result<Document>[]
+}[]
+```
+
+<ResponseField name="values" type="ScalarSearchableValue[]">
+  The grouping key values.
+</ResponseField>
+
+<ResponseField name="result" type="Result<Document>[]">
+  Results for this group.
+</ResponseField>
+
+### Example
+
+```typescript
+const results = await search(db, {
+  term: 'laptop',
+  groupBy: {
+    properties: ['brand', 'category'],
+    maxResult: 3
+  }
+});
+
+if (results.groups) {
+  for (const group of results.groups) {
+    console.log(`Group: ${group.values.join(' - ')}`);
+    for (const hit of group.result) {
+      console.log(`  - ${hit.document.title}`);
+    }
+  }
+  // Output:
+  //   Group: Dell - Laptops
+  //     - Dell XPS 13
+  //     - Dell Inspiron 15
+  //     - Dell Latitude 7420
+  //   Group: HP - Laptops
+  //     - HP Spectre x360
+  //     - HP Envy 13
+  //     - HP Pavilion 15
+}
+```
+
+## Custom Sorting
+
+### CustomSorterFunction
+
+Custom sorting function for advanced use cases.
+
+```typescript
+type CustomSorterFunction<ResultDocument> = (
+  a: CustomSorterFunctionItem<ResultDocument>,
+  b: CustomSorterFunctionItem<ResultDocument>
+) => number
+```
+
+### CustomSorterFunctionItem
+
+Tuple containing document ID, score, and document.
+
+```typescript
+type CustomSorterFunctionItem<ResultDocument> = 
+  [InternalDocumentID, number, ResultDocument]
+```
+
+### Example
+
+```typescript
+// Sort by price descending, then by rating descending
+const customSort: CustomSorterFunction<TypedDocument<typeof db>> = (
+  [idA, scoreA, docA],
+  [idB, scoreB, docB]
+) => {
+  if (docA.price !== docB.price) {
+    return docB.price - docA.price; // Higher price first
+  }
+  return docB.rating - docA.rating; // Higher rating first
+};
+
+const results = await search(db, {
+  term: 'laptop',
+  sortBy: customSort
+});
+```
+
+## ElapsedTime
+
+Time measurement for search operations.
+
+```typescript
+type ElapsedTime = {
+  raw: number
+  formatted: string
+}
+```
+
+<ResponseField name="raw" type="number">
+  Elapsed time in nanoseconds.
+</ResponseField>
+
+<ResponseField name="formatted" type="string">
+  Human-readable time string (e.g., "2ms", "150μs", "1.5s").
+</ResponseField>
+
+### Example
+
+```typescript
+const results = await search(db, { term: 'laptop' });
+
+console.log(`Search completed in ${results.elapsed.formatted}`);
+console.log(`Raw nanoseconds: ${results.elapsed.raw}`);
+
+// Output:
+//   Search completed in 2ms
+//   Raw nanoseconds: 2000000
+```
+
+## Complete Example
+
+```typescript
+import { create, search } from '@orama/orama';
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+    price: 'number',
+    brand: 'enum',
+    category: 'enum',
+    inStock: 'boolean',
+    rating: 'number'
+  }
+});
+
+// Insert some documents
+await db.insertMultiple([
+  { title: 'Dell XPS 13', price: 999, brand: 'Dell', category: 'Laptops', inStock: true, rating: 4.8 },
+  { title: 'HP Envy 13', price: 849, brand: 'HP', category: 'Laptops', inStock: true, rating: 4.5 },
+  { title: 'Lenovo ThinkPad', price: 1199, brand: 'Lenovo', category: 'Laptops', inStock: false, rating: 4.7 }
+]);
+
+// Search with facets and filters
+const results = await search(db, {
+  term: 'laptop',
+  properties: ['title', 'description'],
+  limit: 10,
+  where: {
+    inStock: true,
+    price: { lte: 1000 }
+  },
+  facets: {
+    brand: { limit: 10, sort: 'DESC' },
+    category: { limit: 5 }
+  },
+  sortBy: {
+    property: 'rating',
+    order: 'DESC'
+  }
+});
+
+// Process results
+console.log(`Found ${results.count} results in ${results.elapsed.formatted}`);
+
+for (const hit of results.hits) {
+  console.log(`${hit.document.title} - $${hit.document.price} (score: ${hit.score.toFixed(2)})`);
+}
+
+if (results.facets) {
+  console.log('\nBrands:');
+  for (const [brand, count] of Object.entries(results.facets.brand.values)) {
+    console.log(`  ${brand}: ${count}`);
+  }
+}
+```

@@ -1,0 +1,308 @@
+---
+title: AnswerSession
+description: API reference for the AnswerSession class for conversational search
+---
+
+## Overview
+
+The `AnswerSession` class provides conversational search capabilities by combining Orama search with LLM chat models. It maintains conversation state, manages message history, and streams AI-generated responses based on search results.
+
+## Constructor
+
+```typescript
+new AnswerSession<SourceT = AnyDocument>(db: AnyOrama, config: IAnswerSessionConfig<SourceT>)
+```
+
+### Parameters
+
+<ParamField path="db" type="AnyOrama" required>
+  The Orama database instance to search.
+</ParamField>
+
+<ParamField path="config" type="IAnswerSessionConfig<SourceT>" required>
+  Configuration object for the answer session.
+  
+  <Expandable title="IAnswerSessionConfig properties">
+    <ParamField path="conversationID" type="string">
+      Optional conversation identifier. Auto-generated if not provided.
+    </ParamField>
+    
+    <ParamField path="systemPrompt" type="string">
+      Optional system prompt to guide the AI assistant's behavior.
+    </ParamField>
+    
+    <ParamField path="userContext" type="GenericContext">
+      Additional context to provide to the AI. Can be a string or object.
+    </ParamField>
+    
+    <ParamField path="initialMessages" type="Message[]">
+      Initial conversation messages to seed the session.
+    </ParamField>
+    
+    <ParamField path="events" type="AnswerSessionEvents<SourceT>">
+      Event handlers for state changes.
+      
+      <Expandable title="AnswerSessionEvents properties">
+        <ParamField path="onStateChange" type="(state: Interaction<SourceT>[]) => void">
+          Called whenever the interaction state changes.
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Properties
+
+### state
+
+```typescript
+public state: Interaction<SourceT>[]
+```
+
+Array of all interactions in the current session. Each interaction contains:
+
+<ResponseField name="interactionId" type="string">
+  Unique identifier for this interaction.
+</ResponseField>
+
+<ResponseField name="query" type="string">
+  The user's search query.
+</ResponseField>
+
+<ResponseField name="response" type="string">
+  The AI-generated response.
+</ResponseField>
+
+<ResponseField name="aborted" type="boolean">
+  Whether this interaction was aborted.
+</ResponseField>
+
+<ResponseField name="loading" type="boolean">
+  Whether this interaction is currently loading.
+</ResponseField>
+
+<ResponseField name="sources" type="Nullable<Results<SourceT>>">
+  Search results used to generate the response.
+</ResponseField>
+
+<ResponseField name="translatedQuery" type="Nullable<SearchParams<AnyOrama>>">
+  The translated search parameters.
+</ResponseField>
+
+<ResponseField name="error" type="boolean">
+  Whether an error occurred during this interaction.
+</ResponseField>
+
+<ResponseField name="errorMessage" type="Nullable<string>">
+  Error message if an error occurred.
+</ResponseField>
+
+## Methods
+
+### ask()
+
+Asks a question and returns the complete response after streaming finishes.
+
+```typescript
+async ask(query: AskParams): Promise<string>
+```
+
+<ParamField path="query" type="AskParams" required>
+  Search parameters. Same as `SearchParams<AnyDocument>`.
+</ParamField>
+
+<ResponseField name="returns" type="Promise<string>">
+  The complete AI-generated response.
+</ResponseField>
+
+#### Example
+
+```typescript
+const session = new AnswerSession(db, {
+  systemPrompt: 'You are a helpful assistant for a documentation site.'
+});
+
+const answer = await session.ask({
+  term: 'How do I install Orama?'
+});
+
+console.log(answer);
+```
+
+### askStream()
+
+Asks a question and returns an async generator that streams the response.
+
+```typescript
+async askStream(query: AskParams): Promise<AsyncGenerator<string>>
+```
+
+<ParamField path="query" type="AskParams" required>
+  Search parameters. Same as `SearchParams<AnyDocument>`.
+</ParamField>
+
+<ResponseField name="returns" type="Promise<AsyncGenerator<string>>">
+  An async generator that yields response chunks.
+</ResponseField>
+
+#### Example
+
+```typescript
+const session = new AnswerSession(db, {
+  systemPrompt: 'You are a helpful assistant.'
+});
+
+for await (const chunk of await session.askStream({ term: 'What is Orama?' })) {
+  process.stdout.write(chunk);
+}
+```
+
+### abortAnswer()
+
+Aborts the current streaming response.
+
+```typescript
+abortAnswer(): void
+```
+
+#### Example
+
+```typescript
+const session = new AnswerSession(db, {});
+
+const streamPromise = session.askStream({ term: 'Tell me everything about Orama' });
+
+// Abort after 1 second
+setTimeout(() => {
+  session.abortAnswer();
+}, 1000);
+```
+
+### getMessages()
+
+Returns the current conversation messages.
+
+```typescript
+getMessages(): Message[]
+```
+
+<ResponseField name="returns" type="Message[]">
+  Array of all messages in the conversation.
+  
+  <Expandable title="Message type">
+    <ResponseField name="role" type="MessageRole">
+      Message role: `'system'`, `'user'`, or `'assistant'`.
+    </ResponseField>
+    
+    <ResponseField name="content" type="string">
+      Message content.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### clearSession()
+
+Clears all messages and interactions from the current session.
+
+```typescript
+clearSession(): void
+```
+
+#### Example
+
+```typescript
+const session = new AnswerSession(db, {});
+
+await session.ask({ term: 'First question' });
+await session.ask({ term: 'Follow-up question' });
+
+session.clearSession(); // Clears all history
+
+await session.ask({ term: 'Fresh start' }); // New conversation
+```
+
+### regenerateLast()
+
+Regenerates the last AI response with the same query parameters.
+
+```typescript
+regenrateLast(params: RegenerateLastParams): Promise<string> | Promise<AsyncGenerator<string>>
+```
+
+<ParamField path="params" type="RegenerateLastParams" required>
+  <Expandable title="RegenerateLastParams properties">
+    <ParamField path="stream" type="boolean" required>
+      Whether to stream the regenerated response.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="returns" type="Promise<string> | Promise<AsyncGenerator<string>>">
+  Either the complete response (if `stream: false`) or an async generator (if `stream: true`).
+</ResponseField>
+
+#### Example
+
+```typescript
+const session = new AnswerSession(db, {});
+
+await session.ask({ term: 'Explain search indexing' });
+
+// Regenerate with streaming
+for await (const chunk of await session.regenerateLast({ stream: true })) {
+  console.log(chunk);
+}
+```
+
+## Type Definitions
+
+### GenericContext
+
+```typescript
+type GenericContext = string | object
+```
+
+### MessageRole
+
+```typescript
+type MessageRole = 'system' | 'user' | 'assistant'
+```
+
+### AskParams
+
+```typescript
+type AskParams = SearchParams<AnyDocument>
+```
+
+Same as the standard Orama `SearchParams` type. See [SearchParams](/api/types/search-params) for details.
+
+## Requirements
+
+The `AnswerSession` class requires:
+
+1. The Orama database must have the Secure Proxy plugin installed
+2. A chat model must be configured in the plugin parameters
+
+```typescript
+import { create } from '@orama/orama';
+import { pluginSecureProxy } from '@orama/plugin-secure-proxy';
+
+const db = await create({
+  schema: {
+    title: 'string',
+    description: 'string',
+  },
+  plugins: [
+    await pluginSecureProxy({
+      apiKey: 'your-api-key',
+      chat: {
+        model: 'gpt-4'
+      }
+    })
+  ]
+});
+
+const session = new AnswerSession(db, {
+  systemPrompt: 'You are a helpful assistant.'
+});
+```
