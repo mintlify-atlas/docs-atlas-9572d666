@@ -1,0 +1,205 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Orama",
+  "projectDescription": "A complete search engine and RAG pipeline in your browser, server, or edge network with support for full-text, vector, and hybrid search in less than 2kb.",
+  "theme": "aspen",
+  "primaryColor": "#7C3AED",
+  "lightColor": "#A78BFA",
+  "darkColor": "#5B21B6",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core/database",
+              "core/schema",
+              "core/documents",
+              "core/components"
+            ]
+          },
+          {
+            "group": "Search",
+            "pages": [
+              "search/full-text-search",
+              "search/vector-search",
+              "search/hybrid-search",
+              "search/filters",
+              "search/facets",
+              "search/geosearch",
+              "search/sorting",
+              "search/boosting",
+              "search/typo-tolerance"
+            ]
+          },
+          {
+            "group": "Answer Engine (RAG)",
+            "pages": [
+              "answer-engine/overview",
+              "answer-engine/sessions",
+              "answer-engine/chat"
+            ]
+          },
+          {
+            "group": "Advanced Features",
+            "pages": [
+              "advanced/pinning",
+              "advanced/persistence",
+              "advanced/bm25",
+              "advanced/custom-components"
+            ]
+          },
+          {
+            "group": "Text Analysis",
+            "pages": [
+              "text-analysis/tokenization",
+              "text-analysis/stemming",
+              "text-analysis/stopwords",
+              "text-analysis/languages"
+            ]
+          },
+          {
+            "group": "Plugins",
+            "pages": [
+              "plugins/overview",
+              "plugins/embeddings",
+              "plugins/secure-proxy",
+              "plugins/analytics",
+              "plugins/data-persistence",
+              "plugins/match-highlight",
+              "plugins/parsedoc",
+              "plugins/writing-plugins"
+            ]
+          },
+          {
+            "group": "Framework Integrations",
+            "pages": [
+              "integrations/astro",
+              "integrations/docusaurus",
+              "integrations/vitepress",
+              "integrations/nextra"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/importing-data",
+              "guides/performance-optimization",
+              "guides/deployment",
+              "guides/migration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Database",
+            "pages": [
+              "api/create",
+              "api/load",
+              "api/save"
+            ]
+          },
+          {
+            "group": "Document Operations",
+            "pages": [
+              "api/insert",
+              "api/insert-multiple",
+              "api/update",
+              "api/update-multiple",
+              "api/upsert",
+              "api/upsert-multiple",
+              "api/remove",
+              "api/remove-multiple",
+              "api/count",
+              "api/get-by-id"
+            ]
+          },
+          {
+            "group": "Search Operations",
+            "pages": [
+              "api/search",
+              "api/search-vector"
+            ]
+          },
+          {
+            "group": "Pinning",
+            "pages": [
+              "api/insert-pin",
+              "api/update-pin",
+              "api/delete-pin",
+              "api/get-pin",
+              "api/get-all-pins"
+            ]
+          },
+          {
+            "group": "Answer Engine",
+            "pages": [
+              "api/answer-session"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types/schema",
+              "api/types/search-params",
+              "api/types/results",
+              "api/types/components"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Full-text search with typo tolerance",
+    "Vector search for semantic matching",
+    "Hybrid search combining text and vector",
+    "RAG and answer engine with chat sessions",
+    "Geospatial search support",
+    "Faceted search and filtering",
+    "BM25 ranking algorithm",
+    "Result pinning and merchandising",
+    "Multi-language support (30+ languages)",
+    "Plugin system for extensibility",
+    "Framework integrations (Astro, Docusaurus, Vitepress, Nextra)",
+    "Data persistence",
+    "Runs in browser, server, or edge networks",
+    "Under 2kb bundle size"
+  ],
+  "publicApiSurface": [
+    "create",
+    "insert",
+    "insertMultiple",
+    "update",
+    "updateMultiple",
+    "upsert",
+    "upsertMultiple",
+    "remove",
+    "removeMultiple",
+    "search",
+    "searchVector",
+    "count",
+    "getByID",
+    "load",
+    "save",
+    "insertPin",
+    "updatePin",
+    "deletePin",
+    "getPin",
+    "getAllPins",
+    "AnswerSession"
+  ]
+}
